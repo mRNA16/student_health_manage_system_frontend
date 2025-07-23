@@ -71,7 +71,17 @@ async function handleSubmit() {
   const { valid } = await formApi.validate();
   const values = await formApi.getValues();
   if (valid) {
-    emit('submit', values as { password: string; username: string });
+    emit(
+      'submit',
+      values as {
+        birthday: Date;
+        gender: string;
+        height: number;
+        password: string;
+        username: string;
+        weight: number;
+      },
+    );
   }
 }
 

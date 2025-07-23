@@ -7,6 +7,12 @@ import { computed, h, ref } from 'vue';
 import { AuthenticationRegister, z } from '@vben/common-ui';
 import { $t } from '@vben/locales';
 
+import dayjs from 'dayjs';
+
+import { router } from '#/router';
+
+import { registerApi } from '../../../api/core/auth';
+
 defineOptions({ name: 'Register' });
 
 const loading = ref(false);
@@ -26,7 +32,7 @@ const formSchema = computed((): VbenFormSchema[] => {
       component: 'VbenInputPassword',
       componentProps: {
         passwordStrength: true,
-        placeholder: $t('authentication.password'),
+        placeholder: $t('authentication.passwordTip'),
       },
       fieldName: 'password',
       label: $t('authentication.password'),
@@ -58,6 +64,60 @@ const formSchema = computed((): VbenFormSchema[] => {
       label: $t('authentication.confirmPassword'),
     },
     {
+      component: 'VbenInput',
+      componentProps: {
+        placeholder: $t('authentication.heightTip'),
+        type: 'number',
+      },
+      fieldName: 'height',
+      defaultValue: '',
+      label: $t('authentication.heightTip'),
+      rules: z.preprocess(
+        (val) => (val === '' ? undefined : Number(val)),
+        z.number().min(1, { message: $t('authentication.heightErrorTip') }),
+      ),
+    },
+    // 体重
+    {
+      component: 'VbenInput',
+      componentProps: {
+        placeholder: $t('authentication.weightTip'),
+        type: 'number',
+      },
+      fieldName: 'weight',
+      defaultValue: '',
+      label: $t('authentication.weightTip'),
+      rules: z.preprocess(
+        (val) => (val === '' ? undefined : Number(val)),
+        z.number().min(1, { message: $t('authentication.weightErrorTip') }),
+      ),
+    },
+    // 性别
+    {
+      component: 'VbenSelect',
+      componentProps: {
+        placeholder: $t('authentication.genderTip'),
+        options: [
+          { label: $t('authentication.male'), value: 'male' },
+          { label: $t('authentication.female'), value: 'female' },
+        ],
+      },
+      fieldName: 'gender',
+      label: $t('authentication.genderTip'),
+      rules: z.string().min(1, { message: $t('authentication.genderTip') }),
+    },
+    // 生日
+    {
+      component: 'DatePicker',
+      componentProps: {
+        placeholder: $t('authentication.birthdayTip'),
+        type: 'date',
+      },
+      fieldName: 'birthday',
+      label: $t('authentication.birthdayTip'),
+      rules: z.date(),
+    },
+    {
       component: 'VbenCheckbox',
       fieldName: 'agreePolicy',
       renderComponentContent: () => ({
@@ -82,8 +142,26 @@ const formSchema = computed((): VbenFormSchema[] => {
 });
 
 function handleSubmit(value: Recordable<any>) {
-  // eslint-disable-next-line no-console
-  console.log('register submit:', value);
+  const data = {
+    username: value.username,
+    password: value.password,
+    profile: {
+      height: Number(value.height),
+      weight: Number(value.weight),
+      gender: value.gender,
+      birthday: value.birthday
+        ? dayjs(value.birthday).format('YYYY-MM-DD')
+        : '',
+      realName: value.username,
+      roles: ['User'],
+    },
+  };
+  try {
+    registerApi(data);
+    router.push('/auth/login');
+  } catch {
+    // 处理注册失败，显示后端返回的错误信息
+  }
 }
 </script>
 
