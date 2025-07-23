@@ -1,6 +1,5 @@
 import { createApp, watchEffect } from 'vue';
 import VueECharts from 'vue-echarts';
-import 'echarts'; // 引入 echarts 核心包
 
 import { registerAccessDirective } from '@vben/access';
 import { registerLoadingDirective } from '@vben/common-ui';
@@ -10,9 +9,7 @@ import '@vben/styles';
 import '@vben/styles/ele';
 
 import { useTitle } from '@vueuse/core';
-import { ElLoading } from 'element-plus';
-import ElementPlus from 'element-plus'
-import 'element-plus/dist/index.css'
+import ElementPlus, { ElLoading } from 'element-plus';
 
 import { $t, setupI18n } from '#/locales';
 
@@ -20,6 +17,10 @@ import { initComponentAdapter } from './adapter/component';
 import { initSetupVbenForm } from './adapter/form';
 import App from './app.vue';
 import { router } from './router';
+
+import 'echarts'; // 引入 echarts 核心包
+
+import 'element-plus/dist/index.css';
 
 async function bootstrap(namespace: string) {
   // 初始化组件适配器
@@ -38,8 +39,8 @@ async function bootstrap(namespace: string) {
   // });
   const app = createApp(App);
   // 注册Element Plus提供的v-loading指令
-  app.component('v-chart', VueECharts);
-  app.use(ElementPlus)
+  app.component('VChart', VueECharts);
+  app.use(ElementPlus);
   app.directive('loading', ElLoading.directive);
 
   // 注册Vben提供的v-loading和v-spinning指令

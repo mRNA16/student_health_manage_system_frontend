@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, computed } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
 import dayjs from 'dayjs';
 import { ElMessage } from 'element-plus';
@@ -18,7 +18,11 @@ interface SleepRecord {
   [key: string]: any;
 }
 
-const form = ref<{ date: Date | null; sleep_time: Date | null; wake_time: Date | null }>({
+const form = ref<{
+  date: Date | null;
+  sleep_time: Date | null;
+  wake_time: Date | null;
+}>({
   date: null,
   sleep_time: null,
   wake_time: null,
@@ -54,7 +58,7 @@ const fetchUserAndRecords = async () => {
         },
       ],
     };
-  } catch (error) {
+  } catch {
     ElMessage.error('获取数据失败');
   }
 };
@@ -77,15 +81,18 @@ const addRecord = async () => {
     ElMessage.success('添加成功');
     form.value = { date: null, sleep_time: null, wake_time: null };
     fetchUserAndRecords();
-  } catch (error) {
+  } catch {
     ElMessage.error('添加失败');
   }
 };
 
-const sortField = ref<string>('');  // 当前排序字段
-const sortOrder = ref<'ascending' | 'descending' | null>(null);  // 当前排序顺序
+const sortField = ref<string>(''); // 当前排序字段
+const sortOrder = ref<'ascending' | 'descending' | null>(null); // 当前排序顺序
 
-const handleSortChange = (sort: { prop: string; order: 'ascending' | 'descending' | null }) => {
+const handleSortChange = (sort: {
+  order: 'ascending' | 'descending' | null;
+  prop: string;
+}) => {
   sortField.value = sort.prop;
   sortOrder.value = sort.order;
 };
@@ -97,9 +104,19 @@ const sortedRecords = computed(() => {
     const valA = a[sortField.value];
     const valB = b[sortField.value];
 
-    if (sortField.value === 'date' || sortField.value === 'sleep_time' || sortField.value === 'wake_time') {
-      const timeA = dayjs(valA, sortField.value === 'date' ? 'YYYY-MM-DD' : 'HH:mm:ss').unix();
-      const timeB = dayjs(valB, sortField.value === 'date' ? 'YYYY-MM-DD' : 'HH:mm:ss').unix();
+    if (
+      sortField.value === 'date' ||
+      sortField.value === 'sleep_time' ||
+      sortField.value === 'wake_time'
+    ) {
+      const timeA = dayjs(
+        valA,
+        sortField.value === 'date' ? 'YYYY-MM-DD' : 'HH:mm:ss',
+      ).unix();
+      const timeB = dayjs(
+        valB,
+        sortField.value === 'date' ? 'YYYY-MM-DD' : 'HH:mm:ss',
+      ).unix();
       return sortOrder.value === 'ascending' ? timeA - timeB : timeB - timeA;
     }
 
@@ -108,7 +125,6 @@ const sortedRecords = computed(() => {
     return 0;
   });
 });
-
 
 onMounted(fetchUserAndRecords);
 </script>
@@ -136,11 +152,19 @@ onMounted(fetchUserAndRecords);
       </el-form>
     </el-card>
     <el-card class="mt-4">
-      <el-table :data="sortedRecords" style="width: 100%" @sort-change="handleSortChange">
-        <el-table-column prop="date" label="日期" sortable="custom"/>
-        <el-table-column prop="sleep_time" label="入睡时间" sortable="custom"/>
-        <el-table-column prop="wake_time" label="起床时间" sortable="custom"/>
-        <el-table-column prop="duration" label="睡眠时长(小时)" sortable="custom"/>
+      <el-table
+        :data="sortedRecords"
+        style="width: 100%"
+        @sort-change="handleSortChange"
+      >
+        <el-table-column prop="date" label="日期" sortable="custom" />
+        <el-table-column prop="sleep_time" label="入睡时间" sortable="custom" />
+        <el-table-column prop="wake_time" label="起床时间" sortable="custom" />
+        <el-table-column
+          prop="duration"
+          label="睡眠时长(小时)"
+          sortable="custom"
+        />
       </el-table>
     </el-card>
     <el-card class="mt-4">
