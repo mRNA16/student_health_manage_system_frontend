@@ -1,8 +1,17 @@
 <script lang="ts">
 import { defineComponent, onMounted, ref, watch } from 'vue';
-import { addRecord, getSportList, updateRecord, getRecordList, getCurrentUser, deleteRecord} from '../../api/sport';
-import { ElMessage } from 'element-plus';
+
 import dayjs from 'dayjs';
+import { ElMessage } from 'element-plus';
+
+import {
+  addRecord,
+  deleteRecord,
+  getCurrentUser,
+  getRecordList,
+  getSportList,
+  updateRecord,
+} from '../../api/sport';
 
 export default defineComponent({
   name: 'SportManager',
@@ -17,8 +26,8 @@ export default defineComponent({
       id: 0,
       date: '',
       sport: 0,
-      begin_time:new Date(),
-      end_time:new Date(),
+      begin_time: new Date(),
+      end_time: new Date(),
       calories: 0,
     });
     const fetchUser = async () => {
@@ -33,30 +42,54 @@ export default defineComponent({
 
     const fetchSportList = async () => {
       const res = await getSportList();
-      sportList.value = Array.isArray(res)?res.filter((item)=>'name' in item).map((item)=>item.name):[];
-      metList.value = Array.isArray(res)?res.filter((item)=>'met' in item).map((item)=>item.met):[];
+      sportList.value = Array.isArray(res)
+        ? res.filter((item) => 'name' in item).map((item) => item.name)
+        : [];
+      metList.value = Array.isArray(res)
+        ? res.filter((item) => 'met' in item).map((item) => item.met)
+        : [];
     };
 
     const fetchRecordList = async () => {
       const res = await getRecordList();
       recordList.value = res || [];
-    }
+    };
 
     const openAddDialog = () => {
-      form.value = { id: 0, date: '', sport: 0, begin_time: new Date(1970, 0, 1, 0, 0, 0), end_time: new Date(1970, 0, 1, 0, 0, 0), calories: 0 };
+      form.value = {
+        id: 0,
+        date: '',
+        sport: 0,
+        begin_time: new Date(1970, 0, 1, 0, 0, 0),
+        end_time: new Date(1970, 0, 1, 0, 0, 0),
+        calories: 0,
+      };
       dialogVisible.value = true;
       fetchSportList();
     };
 
-    const editRecord = (row: {id:number,date:string,sport:number,begin_time:string,end_time:string,calories:number}) => {
-      const dateStr = row.date;    
-      form.value = { 
-        id:row.id, 
+    const editRecord = (row: {
+      begin_time: string;
+      calories: number;
+      date: string;
+      end_time: string;
+      id: number;
+      sport: number;
+    }) => {
+      const dateStr = row.date;
+      form.value = {
+        id: row.id,
         date: row.date,
-        sport:row.sport,
-        begin_time: dayjs(`${dateStr} ${row.begin_time}`, "YYYY-MM-DD HH:mm:ss").toDate(),
-        end_time: dayjs(`${dateStr} ${row.end_time}`, "YYYY-MM-DD HH:mm:ss").toDate(),
-        calories:row.calories
+        sport: row.sport,
+        begin_time: dayjs(
+          `${dateStr} ${row.begin_time}`,
+          'YYYY-MM-DD HH:mm:ss',
+        ).toDate(),
+        end_time: dayjs(
+          `${dateStr} ${row.end_time}`,
+          'YYYY-MM-DD HH:mm:ss',
+        ).toDate(),
+        calories: row.calories,
       };
       dialogVisible.value = true;
     };
@@ -89,11 +122,11 @@ export default defineComponent({
     };
 
     const getUserWeight = () => user.value?.weight || 60;
-    const getGenderFactor = () => (user.value?.gender === 'male' ? 3.5 : 3.1); 
+    const getGenderFactor = () => (user.value?.gender === 'male' ? 3.5 : 3.1);
     const getDurationMinutes = () => {
       const start = form.value.begin_time;
       const end = form.value.end_time;
-      let diff = (end.getTime() - start.getTime()) / 60000;
+      let diff = (end.getTime() - start.getTime()) / 60_000;
       if (diff < 0) {
         diff += 1440;
       }
@@ -110,11 +143,10 @@ export default defineComponent({
     watch(
       () => [form.value.sport, form.value.begin_time, form.value.end_time],
       updateCaloriesPreview,
-      { immediate: true }
+      { immediate: true },
     );
 
-
-    onMounted(()=>{
+    onMounted(() => {
       fetchSportList();
       fetchRecordList();
       fetchUser();
@@ -139,10 +171,12 @@ export default defineComponent({
 <template>
   <div class="sport-manager">
     <el-card>
-      <template v-slot:header>
+      <template #header>
         <div class="clearfix">
           <span>运动记录管理</span>
-          <el-button style="float: right" type="primary" @click="openAddDialog">新增记录</el-button>
+          <el-button style="float: right" type="primary" @click="openAddDialog">
+            新增记录
+          </el-button>
         </div>
       </template>
       <el-table v-if="sportList?.length" :data="recordList" style="width: 100%">
@@ -156,8 +190,16 @@ export default defineComponent({
         <el-table-column prop="calories" label="消耗卡路里(kCal)" width="120" />
         <el-table-column label="操作" width="180">
           <template #default="scope">
-            <el-button size="default" @click="editRecord(scope.row)">编辑</el-button>
-            <el-button size="default" type="danger" @click="deleteRecords(scope.row.id)">删除</el-button>
+            <el-button size="default" @click="editRecord(scope.row)">
+              编辑
+            </el-button>
+            <el-button
+              size="default"
+              type="danger"
+              @click="deleteRecords(scope.row.id)"
+            >
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -175,15 +217,15 @@ export default defineComponent({
         <el-form-item label="运动项目">
           <el-select v-model="form.sport" placeholder="请选择运动项目">
             <el-option
-              v-for="(item,index) in sportList"
+              v-for="(item, index) in sportList"
               :key="index"
               :label="item"
               :value="index"
             />
           </el-select>
         </el-form-item>
-          <el-form-item label="开始时间">
-            <el-time-picker
+        <el-form-item label="开始时间">
+          <el-time-picker
             v-model="form.begin_time"
             placeholder="开始时间"
             style="width: 120px"
@@ -191,18 +233,18 @@ export default defineComponent({
         </el-form-item>
         <el-form-item label="结束时间">
           <el-time-picker
-          v-model="form.end_time"
-          placeholder="结束时间"
-          style="width: 120px"
-        />
+            v-model="form.end_time"
+            placeholder="结束时间"
+            style="width: 120px"
+          />
         </el-form-item>
         <el-form-item label="预计消耗卡路里">
-          <div style="font-weight: bold; color: #409EFF">
+          <div style="font-weight: bold; color: #409eff">
             {{ caloriesPreview }} kcal
           </div>
         </el-form-item>
       </el-form>
-      <template v-slot:footer>
+      <template #footer>
         <span class="dialog-footer">
           <el-button @click="dialogVisible = false">取 消</el-button>
           <el-button type="primary" @click="submitForm">确 定</el-button>
