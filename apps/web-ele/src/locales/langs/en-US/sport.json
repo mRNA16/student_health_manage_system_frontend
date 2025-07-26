@@ -1,0 +1,13 @@
+{
+  "title": "Sport Management",
+  "type": "Sport Type",
+  "duration": "Duration(minutes)",
+  "calories": "Calories Burned",
+  "notes": "Notes",
+  "running": "Running",
+  "swimming": "Swimming",
+  "cycling": "Cycling",
+  "yoga": "Yoga",
+  "fitness": "Fitness",
+  "other": "Other"
+}

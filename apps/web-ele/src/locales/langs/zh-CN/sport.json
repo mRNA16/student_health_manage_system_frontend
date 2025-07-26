@@ -1,0 +1,13 @@
+{
+  "title": "运动管理",
+  "type": "运动类型",
+  "duration": "运动时长(分钟)",
+  "calories": "消耗卡路里",
+  "notes": "备注",
+  "running": "跑步",
+  "swimming": "游泳",
+  "cycling": "骑行",
+  "yoga": "瑜伽",
+  "fitness": "健身",
+  "other": "其他"
+}

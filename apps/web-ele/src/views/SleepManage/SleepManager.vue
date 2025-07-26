@@ -35,7 +35,7 @@ const fetchUserAndRecords = async () => {
   try {
     // 获取当前用户信息
     const userRes = await getCurrentUser();
-    user.value = userRes.data;
+    user.value = userRes;
 
     // 获取最近7天睡眠记录
     const end = dayjs().format('YYYY-MM-DD');
