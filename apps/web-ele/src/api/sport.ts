@@ -15,7 +15,6 @@ export function addRecord(data: {
   begin_time: string;
   date: string;
   end_time: string;
-  id: number;
   sport: number;
 }) {
   return requestClient.post('/sport/records/', data);

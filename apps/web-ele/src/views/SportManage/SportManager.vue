@@ -1,5 +1,7 @@
 <script lang="ts">
-import { defineComponent, onMounted, ref, watch } from 'vue';
+import { computed, defineComponent, onMounted, ref, watch } from 'vue';
+
+import { EchartsUI, useEcharts } from '@vben/plugins/echarts';
 
 import dayjs from 'dayjs';
 import { ElMessage } from 'element-plus';
@@ -15,6 +17,7 @@ import {
 
 export default defineComponent({
   name: 'SportManager',
+  components: { EchartsUI },
   setup() {
     const sportList = ref();
     const metList = ref();
@@ -22,6 +25,15 @@ export default defineComponent({
     const dialogVisible = ref(false);
     const user = ref<any>(null);
     const caloriesPreview = ref(0);
+
+    // 图表相关引用
+    const weekChartRef = ref(); // 周折线图引用
+    const dayPieChartRef = ref(); // 日饼图引用
+    const { renderEcharts: renderWeekChart } = useEcharts(weekChartRef); // 周图表渲染函数
+    const { renderEcharts: renderDayPieChart } = useEcharts(dayPieChartRef); // 日图表渲染函数
+    const selectedDate = ref(dayjs().format('YYYY-MM-DD'));
+    const timeRange = ref('7d'); // 默认近7天
+
     const form = ref({
       id: 0,
       date: '',
@@ -53,6 +65,9 @@ export default defineComponent({
     const fetchRecordList = async () => {
       const res = await getRecordList();
       recordList.value = res || [];
+
+      renderWeekCaloriesChart();
+      renderDailyPieChart();
     };
 
     const openAddDialog = () => {
@@ -146,10 +161,251 @@ export default defineComponent({
       { immediate: true },
     );
 
-    onMounted(() => {
-      fetchSportList();
-      fetchRecordList();
-      fetchUser();
+    const getCaloriesData = () => {
+      const range = timeRange.value;
+      let labels: string[] = []; // x轴标签
+      let groupKey: (date: string) => string;
+
+      // 根据时间范围生成标签和分组规则
+      if (range === '7d') {
+        labels = Array.from({ length: 7 }, (_, i) =>
+          dayjs().subtract(i, 'day').format('MM-DD'),
+        ).reverse();
+        groupKey = (date) => dayjs(date).format('MM-DD');
+      } else if (range === '30d') {
+        labels = Array.from({ length: 30 }, (_, i) =>
+          dayjs().subtract(i, 'day').format('MM-DD'),
+        ).reverse();
+        groupKey = (date) => dayjs(date).format('MM-DD');
+      } else {
+        labels = Array.from({ length: 12 }, (_, i) =>
+          dayjs().subtract(i, 'month').format('YYYY-MM'),
+        ).reverse();
+        groupKey = (date) => dayjs(date).format('YYYY-MM');
+      }
+
+      const recordMap: Record<string, number> = {};
+      labels.forEach((label) => {
+        recordMap[label] = 0;
+      });
+
+      // 遍历记录，累加对应分组的卡路里
+      (recordList.value as Array<{ calories: number; date: string }>).forEach(
+        (record) => {
+          const key = groupKey(record.date);
+          if (Object.prototype.hasOwnProperty.call(recordMap, key)) {
+            // 只统计在标签范围内的数据
+            recordMap[key] = (recordMap[key] || 0) + (record.calories || 0);
+          }
+        },
+      );
+
+      const caloriesData = labels.map((label) => recordMap[label] || 0);
+
+      return { labels, caloriesData };
+    };
+
+    // 一周卡路里折线图
+    const renderWeekCaloriesChart = () => {
+      const { labels, caloriesData } = getCaloriesData();
+      const titleMap: Record<'1y' | '7d' | '30d', string> = {
+        '7d': '近7天卡路里消耗趋势',
+        '30d': '近30天卡路里消耗趋势',
+        '1y': '近1年卡路里消耗趋势',
+      };
+      const timeRange = ref<'1y' | '7d' | '30d'>('7d');
+
+      renderWeekChart({
+        title: {
+          text: titleMap[timeRange.value],
+          left: 'center',
+          textStyle: {
+            fontSize: 16,
+          },
+        },
+        tooltip: {
+          trigger: 'axis',
+          formatter: '{b}: {c} kcal', // 显示日期和对应卡路里
+        },
+        grid: {
+          left: '3%',
+          right: '4%',
+          bottom: '3%',
+          containLabel: true,
+        },
+        xAxis: {
+          type: 'category',
+          data: labels,
+          axisLabel: {
+            rotate: timeRange.value === '1y' ? 30 : 0,
+          },
+        },
+        yAxis: {
+          type: 'value',
+          name: '卡路里 (kcal)',
+          min: 0, // 确保Y轴从0开始
+          axisLabel: {
+            formatter: '{value}',
+          },
+        },
+        series: [
+          {
+            data: caloriesData,
+            type: 'line',
+            smooth: true, // 平滑曲线
+            symbol: 'circle', // 数据点样式
+            symbolSize: 8, // 数据点大小
+            lineStyle: {
+              width: 3,
+              color: '#409eff',
+            },
+            itemStyle: {
+              color: '#409eff',
+            },
+            areaStyle: {
+              color: {
+                type: 'linear',
+                x: 0,
+                y: 0,
+                x2: 0,
+                y2: 1,
+                colorStops: [
+                  { offset: 0, color: 'rgba(64, 158, 255, 0.3)' },
+                  { offset: 1, color: 'rgba(64, 158, 255, 0)' },
+                ],
+              },
+            },
+            emphasis: {
+              scale: true, // 鼠标 hover 时放大数据点
+            },
+          },
+        ],
+      });
+    };
+
+    const handleTimeRangeChange = () => {
+      // 范围变化时重新渲染折线图
+      renderWeekCaloriesChart();
+    };
+
+    // 获取当天的运动类型卡路里数据
+    const getSelectedDateSportData = () => {
+      const targetDate = selectedDate.value;
+      const targetRecords = (
+        recordList.value as Array<{
+          calories: number;
+          date: string;
+          sport: number;
+        }>
+      ).filter((record) => record.date === targetDate);
+
+      if (targetRecords.length === 0) return null; // 无数据时返回null
+
+      const sportMap: Record<string, number> = {};
+      targetRecords.forEach((record) => {
+        const sportName = sportList.value[record.sport] || '未知';
+        if (!sportMap[sportName]) {
+          sportMap[sportName] = 0;
+        }
+        sportMap[sportName] += record.calories || 0;
+      });
+
+      return Object.entries(sportMap).map(([name, value]) => ({ name, value }));
+    };
+
+    // 渲染当天运动类型饼图
+    const renderDailyPieChart = () => {
+      const sportData = getSelectedDateSportData();
+
+      if (!sportData) {
+        if (dayPieChartRef.value) {
+          renderDayPieChart({}); // 清空图表
+        }
+        return;
+      }
+
+      // 饼图配置
+      renderDayPieChart({
+        title: {
+          text: `${selectedDate.value} 运动卡路里分布`,
+          left: 'center',
+          textStyle: {
+            fontSize: 16,
+          },
+        },
+        tooltip: {
+          trigger: 'item',
+          formatter: '{a} <br/>{b}: {c} kcal ({d}%)',
+        },
+        legend: {
+          orient: 'vertical',
+          left: 10,
+          data: sportData.map((item) => item.name),
+          textStyle: {
+            fontSize: 12,
+          },
+        },
+        series: [
+          {
+            name: '卡路里消耗',
+            type: 'pie',
+            radius: ['40%', '70%'], // 环形饼图
+            center: ['50%', '55%'],
+            avoidLabelOverlap: false,
+            itemStyle: {
+              borderRadius: 8,
+              borderColor: '#fff',
+              borderWidth: 2,
+            },
+            label: {
+              show: false,
+              position: 'center',
+            },
+            emphasis: {
+              label: {
+                show: true,
+                fontSize: 16,
+                fontWeight: 'bold',
+              },
+            },
+            labelLine: {
+              show: false,
+            },
+            data: sportData,
+          },
+        ],
+        color: [
+          '#409eff',
+          '#67c23a',
+          '#e6a23c',
+          '#f56c6c',
+          '#909399',
+          '#c0c4cc',
+          '#8e44ad',
+          '#3498db',
+          '#1abc9c',
+          '#f1c40f',
+        ],
+      });
+    };
+
+    // 新增：计算是否显示当天饼图
+    const showSelectedDatePieChart = computed(() => {
+      return getSelectedDateSportData() !== null;
+    });
+    const handleDateChange = () => {
+      // 日期变化时重新渲染饼图
+      renderDailyPieChart();
+    };
+
+    onMounted(async () => {
+      await fetchUser();
+      await fetchSportList();
+      await fetchRecordList();
+      renderWeekCaloriesChart();
+      watch(timeRange, handleTimeRangeChange, { immediate: true });
+      renderDailyPieChart();
+      watch(selectedDate, handleDateChange, { immediate: true });
     });
 
     return {
@@ -163,6 +419,13 @@ export default defineComponent({
       editRecord,
       submitForm,
       deleteRecords,
+      weekChartRef,
+      dayPieChartRef,
+      showSelectedDatePieChart,
+      selectedDate,
+      handleDateChange,
+      timeRange,
+      handleTimeRangeChange,
     };
   },
 });
@@ -203,6 +466,72 @@ export default defineComponent({
           </template>
         </el-table-column>
       </el-table>
+    </el-card>
+
+    <el-card class="mt-4">
+      <template #header>
+        <div
+          style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+          "
+        >
+          <span>卡路里消耗趋势</span>
+          <!-- 添加时间范围选择器 -->
+          <el-select
+            v-model="timeRange"
+            placeholder="选择时间范围"
+            @change="handleTimeRangeChange"
+            style="width: 160px"
+          >
+            <el-option label="近7天" value="7d" />
+            <el-option label="近30天" value="30d" />
+            <el-option label="近1年" value="1y" />
+          </el-select>
+        </div>
+      </template>
+      <EchartsUI ref="weekChartRef" style="height: 300px" />
+    </el-card>
+
+    <el-card class="mt-4">
+      <template #header>
+        <div
+          style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+          "
+        >
+          <span>运动卡路里分布</span>
+          <el-date-picker
+            v-model="selectedDate"
+            type="date"
+            format="YYYY-MM-DD"
+            value-format="YYYY-MM-DD"
+            placeholder="选择日期"
+            @change="handleDateChange"
+            style="width: 180px"
+          />
+        </div>
+      </template>
+      <EchartsUI
+        ref="dayPieChartRef"
+        style="height: 300px"
+        v-if="showSelectedDatePieChart"
+      />
+      <div
+        style="
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          height: 300px;
+          color: #666;
+        "
+        v-if="!showSelectedDatePieChart"
+      >
+        该日期无运动记录
+      </div>
     </el-card>
 
     <el-dialog v-model="dialogVisible" title="运动记录">
@@ -257,5 +586,13 @@ export default defineComponent({
 <style scoped>
 .sport-manager {
   padding: 20px;
+}
+
+.mt-4 {
+  margin-top: 16px;
+}
+
+::v-deep .el-select {
+  width: 160px;
 }
 </style>

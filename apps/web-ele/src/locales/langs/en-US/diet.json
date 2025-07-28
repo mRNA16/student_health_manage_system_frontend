@@ -1,0 +1,12 @@
+{
+  "title": "Diet Management",
+  "breakfast": "Breakfast",
+  "lunch": "Lunch",
+  "dinner": "Dinner",
+  "snack": "Snack",
+  "food": "Food",
+  "amount": "Amount(g)",
+  "calories": "Calories",
+  "searchFood": "Search food...",
+  "addFood": "Add Food"
+}

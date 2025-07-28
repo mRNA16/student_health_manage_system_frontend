@@ -1,0 +1,12 @@
+{
+  "title": "饮食管理",
+  "breakfast": "早餐",
+  "lunch": "午餐",
+  "dinner": "晚餐",
+  "snack": "加餐",
+  "food": "食物",
+  "amount": "份量(克)",
+  "calories": "卡路里",
+  "searchFood": "搜索食物...",
+  "addFood": "添加食物"
+}
