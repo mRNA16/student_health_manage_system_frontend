@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 
 import dayjs from 'dayjs';
+import isBetween from 'dayjs/plugin/isBetween';
 import { ElMessage } from 'element-plus';
 
 import {
@@ -9,6 +10,8 @@ import {
   getCurrentUser,
   getSleepRecords,
 } from '../../api/sleep';
+
+dayjs.extend(isBetween);
 
 interface SleepRecord {
   date: string;
@@ -27,9 +30,14 @@ const form = ref<{
   sleep_time: null,
   wake_time: null,
 });
-const records = ref<SleepRecord[]>([]);
+const allRecords = ref<SleepRecord[]>([]);
+const chartRecords = ref<SleepRecord[]>([]);
+
 const chartOption = ref({});
 const user = ref<any>(null);
+
+const timeRange = ref<'1y' | '7d' | '30d'>('7d');
+const tableTimeRange = ref<'7d' | '30d' | 'all'>('all');
 
 // 睡眠指标
 const averageTST = ref(0); // 平均睡眠时长
@@ -37,6 +45,9 @@ const stdSleepTime = ref(0); // 入睡时间标准差
 const stdWakeTime = ref(0); // 醒来时间标准差
 const stdDuration = ref(0); // 睡眠时长标准差
 const avgSleepMidpoint = ref(''); // 平均睡眠中点
+
+const continuousSleepDeprivation = ref(0); // 连续睡眠不足的天数
+const showSleepWarning = ref(false); // 是否显示睡眠警告
 
 // 睡眠问题和建议
 const sleepIssues = ref<string[]>([]); // 检测到的睡眠问题
@@ -48,39 +59,283 @@ const sleepTips = ref<string[]>([]); // 睡眠小贴士
 const HEALTHY_SLEEP_DURATION = 7; // 健康睡眠时长最低7小时
 const HEALTHY_BEDTIME = 23.5; // 健康入睡时间（23:30，以小时为单位）
 const HEALTHY_WAKETIME = 6.5; // 健康起床时间（06:30，以小时为单位）
+const DEPRIVATION_THRESHOLD = 5; // 睡眠不足阈值
+const CONTINUOUS_DAYS_THRESHOLD = 4; // 连续天数阈值
+
+// 睡眠状态颜色映射
+const SLEEP_COLORS = {
+  normal: '#52c41a',
+  low: '#faad14',
+  insufficient: '#f5222d',
+  year: '#1890ff',
+};
+
+const getTimeRangeDates = () => {
+  const today = dayjs();
+  let end, start;
+  switch (timeRange.value) {
+    case '1y': {
+      start = today.subtract(1, 'y').startOf('day'); // 近1年：今天-1年 00:00
+      end = today.endOf('day');
+      break;
+    }
+    case '7d': {
+      start = today.subtract(6, 'd').startOf('day'); // 近7天：今天-6天 00:00
+      end = today.endOf('day'); // 今天23:59
+      break;
+    }
+    case '30d': {
+      start = today.subtract(29, 'd').startOf('day'); // 近30天：今天-29天 00:00
+      end = today.endOf('day');
+      break;
+    }
+  }
+  return {
+    start: start.format('YYYY-MM-DD'),
+    end: end.format('YYYY-MM-DD'),
+  };
+};
+
+const getTableTimeRangeDates = () => {
+  const today = dayjs();
+  if (tableTimeRange.value === '7d') {
+    return {
+      start: today.subtract(6, 'd').startOf('day').format('YYYY-MM-DD'),
+      end: today.endOf('day').format('YYYY-MM-DD'),
+    };
+  } else if (tableTimeRange.value === '30d') {
+    return {
+      start: today.subtract(29, 'd').startOf('day').format('YYYY-MM-DD'),
+      end: today.endOf('day').format('YYYY-MM-DD'),
+    };
+  } else {
+    // 全部记录：返回极早和极晚的日期（确保包含所有数据）
+    return {
+      start: '1970-01-01',
+      end: '2100-12-31',
+    };
+  }
+};
+
+const calculateTotalDuration = (
+  sleepTime: string,
+  wakeTime: string,
+): number => {
+  const sleep = dayjs(sleepTime, 'HH:mm:ss');
+  const wake = dayjs(wakeTime, 'HH:mm:ss');
+
+  // 计算总时长（小时），处理跨天情况
+  let hours = wake.diff(sleep, 'hour', true);
+  if (hours < 0) {
+    hours += 24;
+  }
+
+  return Number.parseFloat(hours.toFixed(1));
+};
+
+const splitOvernightSleep = (
+  baseDate: string,
+  sleepTime: string,
+  wakeTime: string,
+) => {
+  // 解析入睡和起床时间
+  const sleep = dayjs(`${baseDate} ${sleepTime}`);
+  const wake = dayjs(`${baseDate} ${wakeTime}`);
+
+  // 计算是否跨天
+  const isOvernight = wake.isBefore(sleep);
+
+  // 如果不跨天，直接返回当天的睡眠时长
+  if (!isOvernight) {
+    const duration = wake.diff(sleep, 'hour', true);
+    return [
+      {
+        date: baseDate,
+        duration: Number.parseFloat(duration.toFixed(1)),
+      },
+    ];
+  }
+
+  // 如果跨天，拆分到两天
+  const endOfDay = dayjs(baseDate).endOf('day'); // 当天23:59:59
+  const startOfNextDay = dayjs(baseDate).add(1, 'day').startOf('day'); // 次日00:00:00
+
+  // 计算当天的睡眠时长（入睡到午夜）
+  const durationFirstDay = endOfDay.diff(sleep, 'hour', true);
+  // 计算次日的睡眠时长（午夜到起床）
+  const durationSecondDay = wake.diff(startOfNextDay, 'hour', true);
+
+  // 次日的日期
+  const nextDay = dayjs(baseDate).add(1, 'day').format('YYYY-MM-DD');
+
+  return [
+    {
+      date: baseDate,
+      duration: Number.parseFloat(durationFirstDay.toFixed(1)),
+    },
+    {
+      date: nextDay,
+      duration: Number.parseFloat(durationSecondDay.toFixed(1)),
+    },
+  ];
+};
+const aggregateDailyDuration = (records: SleepRecord[]) => {
+  const dailyMap: { [key: string]: number } = {}; // 键：日期（YYYY-MM-DD），值：总时长
+
+  records.forEach((record) => {
+    // 计算单条记录的总睡眠时长并保存
+    const totalDuration = calculateTotalDuration(
+      record.sleep_time,
+      record.wake_time,
+    );
+    record.duration = totalDuration;
+
+    // 拆分跨天睡眠到相应日期
+    const splitDurations = splitOvernightSleep(
+      record.date,
+      record.sleep_time,
+      record.wake_time,
+    );
+
+    // 累加每天的睡眠时长
+    splitDurations.forEach(({ date, duration }) => {
+      if (!dailyMap[date]) {
+        dailyMap[date] = 0;
+      }
+      dailyMap[date] += duration;
+      // 保留一位小数，避免浮点数精度问题
+      dailyMap[date] = Number.parseFloat(dailyMap[date].toFixed(1));
+    });
+  });
+
+  // 转换为数组并按日期排序
+  return Object.entries(dailyMap)
+    .map(([date, total]) => ({
+      date,
+      totalDuration: total,
+    }))
+    .sort((a, b) => dayjs(a.date).unix() - dayjs(b.date).unix()); // 按日期升序
+};
+
+const aggregateYearlyData = (
+  dailyData: { date: string; totalDuration: number }[],
+) => {
+  const monthlyMap: { [key: string]: { days: number; total: number } } = {};
+
+  dailyData.forEach((item) => {
+    const month = dayjs(item.date).format('YYYY-MM'); // 格式：2023-10
+    if (!monthlyMap[month]) {
+      monthlyMap[month] = { total: 0, days: 0 };
+    }
+    monthlyMap[month].total += item.totalDuration;
+    monthlyMap[month].days += 1; // 统计当月有记录的天数
+  });
+
+  // 转换为数组并排序
+  return Object.entries(monthlyMap)
+    .map(([month, data]) => ({
+      date: month,
+      avgDuration: Number.parseFloat((data.total / data.days).toFixed(1)), // 月平均每天时长
+      totalDuration: Number.parseFloat(data.total.toFixed(1)), // 月总时长
+    }))
+    .sort((a, b) => dayjs(a.date).unix() - dayjs(b.date).unix());
+};
 
 const fetchUserAndRecords = async () => {
   try {
     // 获取当前用户信息
     const userRes = await getCurrentUser();
     user.value = userRes;
+    const allRes = await getSleepRecords({
+      start_date: '1970-01-01',
+      end_date: dayjs().format('YYYY-MM-DD'),
+    });
+    allRecords.value = (allRes || []) as SleepRecord[];
+    allRecords.value.forEach((record) => {
+      record.duration = calculateTotalDuration(
+        record.sleep_time,
+        record.wake_time,
+      );
+    });
 
-    // 获取最近7天睡眠记录
-    const end = dayjs().format('YYYY-MM-DD');
-    const start = dayjs().subtract(6, 'day').format('YYYY-MM-DD');
+    const { start, end } = getTimeRangeDates();
     const res = await getSleepRecords({ start_date: start, end_date: end });
-    records.value = (res || []) as SleepRecord[];
-    records.value.sort((a, b) => dayjs(a.date).unix() - dayjs(b.date).unix());
+    let rawChartRecords = (res || []) as SleepRecord[];
+
+    // 过滤超出时间范围的记录
+    const startDate = dayjs(start);
+    const endDate = dayjs(end);
+    rawChartRecords = rawChartRecords.filter((record) => {
+      const recordDate = dayjs(record.date);
+      return recordDate.isBetween(startDate, endDate, null, '[]'); // 包含起止日期
+    });
+    chartRecords.value = rawChartRecords;
 
     // 生成图表数据
+    const dailyData = aggregateDailyDuration(chartRecords.value);
+    let chartData, titleText, xAxisData: string[];
+
+    if (timeRange.value === '1y') {
+      // 年度数据处理
+      const aggregated = aggregateYearlyData(dailyData);
+      xAxisData = aggregated.map((item) => item.date);
+      chartData = aggregated.map((item) => ({
+        value: item.avgDuration,
+        itemStyle: { color: SLEEP_COLORS.year },
+      }));
+      titleText = '近一年每月平均睡眠时长（小时/天）';
+    } else {
+      xAxisData = dailyData.map((item) => item.date);
+      chartData = dailyData.map((item) => ({
+        value: item.totalDuration,
+        itemStyle: { color: getSleepColor(item.totalDuration) },
+      }));
+      titleText =
+        timeRange.value === '7d'
+          ? '近7天每天睡眠总时长'
+          : '近30天每天睡眠总时长';
+    }
+
     chartOption.value = {
-      title: { text: '最近一周睡眠时长' },
-      tooltip: {},
-      xAxis: { type: 'category', data: records.value.map((r) => r.date) },
+      title: { text: titleText },
+      tooltip: {
+        formatter: '{b}: {c} 小时', // 显示日期和对应时长
+      },
+      xAxis: {
+        type: 'category',
+        data: xAxisData,
+        axisLabel: { rotate: timeRange.value === '1y' ? 30 : 0 },
+      },
       yAxis: { type: 'value', name: '小时' },
       series: [
         {
-          data: records.value.map((r) => r.duration),
+          data: chartData,
           type: 'bar',
-          name: '睡眠时长',
+          name: timeRange.value === '1y' ? '平均每天时长' : '睡眠时长',
         },
       ],
     };
     calculateSleepMetrics(); // 计算睡眠指标
     detectSleepIssues(); // 检测睡眠问题
     generateSleepAdvice(); // 生成睡眠建议
+    checkContinuousSleepDeprivation(); // 检查连续睡眠不足
   } catch {
     ElMessage.error('获取数据失败');
+  }
+};
+
+const getSleepColor = (duration?: number) => {
+  if (timeRange.value === '1y') {
+    return SLEEP_COLORS.year;
+  }
+  if (!duration) return '#ccc'; // 无数据时默认灰色
+
+  if (duration < DEPRIVATION_THRESHOLD) {
+    return SLEEP_COLORS.insufficient; // 睡眠不足 - 红色
+  } else if (duration < HEALTHY_SLEEP_DURATION) {
+    return SLEEP_COLORS.low; // 时长偏低 - 黄色
+  } else {
+    return SLEEP_COLORS.normal; // 正常 - 绿色
   }
 };
 
@@ -107,8 +362,50 @@ const addRecord = async () => {
   }
 };
 
+const checkContinuousSleepDeprivation = () => {
+  let count = 0;
+  let maxContinuous = 0;
+
+  // 遍历记录，检查连续多少天睡眠不足
+  for (const record of allRecords.value) {
+    if (record.duration && record.duration < DEPRIVATION_THRESHOLD) {
+      count++;
+      // 记录最长连续天数
+      maxContinuous = Math.max(maxContinuous, count);
+    } else {
+      count = 0; // 重置计数
+    }
+  }
+
+  continuousSleepDeprivation.value = maxContinuous;
+
+  // 如果连续达到阈值天数睡眠不足，显示警告
+  if (maxContinuous >= CONTINUOUS_DAYS_THRESHOLD) {
+    showSleepWarning.value = true;
+    // 显示警告消息
+    ElMessage({
+      message: `⚠️ 健康警告：您已连续${maxContinuous}天睡眠不足（少于${DEPRIVATION_THRESHOLD}小时）！`,
+      type: 'error',
+      duration: 5000, // 15秒后自动关闭
+      showClose: true, // 允许手动关闭
+    });
+  } else {
+    showSleepWarning.value = false;
+  }
+};
+
 const sortField = ref<string>(''); // 当前排序字段
 const sortOrder = ref<'ascending' | 'descending' | null>(null); // 当前排序顺序
+
+const filteredTableRecords = computed(() => {
+  const { start, end } = getTableTimeRangeDates();
+  const startDate = dayjs(start);
+  const endDate = dayjs(end);
+  return allRecords.value.filter((record) => {
+    const recordDate = dayjs(record.date);
+    return recordDate.isBetween(startDate, endDate, null, '[]');
+  });
+});
 
 const handleSortChange = (sort: {
   order: 'ascending' | 'descending' | null;
@@ -119,9 +416,9 @@ const handleSortChange = (sort: {
 };
 
 const sortedRecords = computed(() => {
-  if (!sortField.value || !sortOrder.value) return records.value;
+  if (!sortField.value || !sortOrder.value) return filteredTableRecords.value;
 
-  return [...records.value].sort((a, b) => {
+  return [...filteredTableRecords.value].sort((a, b) => {
     const valA = a[sortField.value];
     const valB = b[sortField.value];
 
@@ -166,12 +463,12 @@ const timeToHours = (timeStr: string): number => {
 
 // 计算睡眠核心指标
 const calculateSleepMetrics = () => {
-  if (records.value.length === 0) return;
+  if (allRecords.value.length === 0) return;
 
   // 提取睡眠时长、入睡时间、起床时间数据
-  const durations = records.value.map((r) => r.duration || 0);
-  const sleepTimes = records.value.map((r) => timeToHours(r.sleep_time));
-  const wakeTimes = records.value.map((r) => timeToHours(r.wake_time));
+  const durations = allRecords.value.map((r) => r.duration || 0);
+  const sleepTimes = allRecords.value.map((r) => timeToHours(r.sleep_time));
+  const wakeTimes = allRecords.value.map((r) => timeToHours(r.wake_time));
 
   // 计算平均值和标准差
   averageTST.value =
@@ -181,7 +478,7 @@ const calculateSleepMetrics = () => {
   stdDuration.value = calculateStd(durations);
 
   // 计算平均睡眠中点（入睡时间 + 睡眠时长/2）
-  const midpoints = records.value.map((_, i) => {
+  const midpoints = allRecords.value.map((_, i) => {
     const sleepHour = sleepTimes[i] ?? 0;
     const duration = durations[i] ?? 0;
     return (sleepHour + duration / 2) % 24; // 取模24处理跨天
@@ -218,7 +515,7 @@ const detectSleepIssues = () => {
   }
 
   // 检测入睡过晚或起床过早（基于最近一条记录）
-  const latestRecord = records.value[records.value.length - 1];
+  const latestRecord = allRecords.value[allRecords.value.length - 1];
   if (latestRecord) {
     const latestSleepHour = timeToHours(latestRecord.sleep_time);
     if (latestSleepHour > HEALTHY_BEDTIME) {
@@ -245,6 +542,15 @@ const generateSleepAdvice = () => {
   // 针对性建议（根据检测到的问题）
   const targeted: string[] = [];
 
+  // 针对连续睡眠不足的建议
+  if (continuousSleepDeprivation.value >= CONTINUOUS_DAYS_THRESHOLD) {
+    targeted.push(
+      `• 紧急调整：未来2天尽量保证至少${HEALTHY_SLEEP_DURATION}小时睡眠，避免健康风险加剧。`,
+      '• 考虑短暂午休（20-30分钟）补充精力，但避免过长影响夜间睡眠。',
+      '• 若感到极度疲劳，可适当减少当天工作量，优先保证休息。',
+    );
+  }
+
   // 针对睡眠时长不足
   if (averageTST.value < HEALTHY_SLEEP_DURATION) {
     targeted.push(
@@ -270,7 +576,7 @@ const generateSleepAdvice = () => {
   }
 
   // 针对入睡过晚
-  const latestRecord = records.value[records.value.length - 1];
+  const latestRecord = allRecords.value[allRecords.value.length - 1];
   if (latestRecord && timeToHours(latestRecord.sleep_time) > HEALTHY_BEDTIME) {
     targeted.push(
       '• 实施“电子宵禁”：睡前1小时远离手机、电脑等电子设备（蓝光会抑制褪黑素分泌）。',
@@ -300,13 +606,43 @@ const generateSleepAdvice = () => {
   sleepTips.value = [...allTips].sort(() => Math.random() - 0.5).slice(0, 3);
 };
 
-const showAdvice = computed(() => records.value.length > 0);
+const showAdvice = computed(() => allRecords.value.length > 0);
+
+const showSevereWarning = computed(
+  () => continuousSleepDeprivation.value >= CONTINUOUS_DAYS_THRESHOLD,
+);
+
+const handleTimeRangeChange = (value: '1y' | '7d' | '30d') => {
+  timeRange.value = value;
+  fetchUserAndRecords(); // 重新获取数据
+};
+
+const handleTableTimeRangeChange = (value: '7d' | '30d' | 'all') => {
+  tableTimeRange.value = value;
+};
 
 onMounted(fetchUserAndRecords);
 </script>
 
 <template>
   <div>
+    <el-card
+      v-if="showSevereWarning"
+      class="mt-4"
+      shadow="always"
+      style="border-left: 4px solid #f56c6c"
+    >
+      <div style="display: flex; align-items: center; color: #f56c6c">
+        <el-icon style="margin-right: 8px"><WarningFilled /></el-icon>
+        <div>
+          <strong>健康警告：</strong>
+          您已连续{{ continuousSleepDeprivation }}天睡眠不足（少于{{
+            DEPRIVATION_THRESHOLD
+          }}小时），这可能导致注意力下降、免疫力降低等健康风险，请立即调整作息！
+        </div>
+      </div>
+    </el-card>
+
     <el-card>
       <el-form :model="form" inline>
         <el-date-picker
@@ -328,6 +664,24 @@ onMounted(fetchUserAndRecords);
       </el-form>
     </el-card>
     <el-card class="mt-4">
+      <template #header>
+        <div class="clearfix">
+          <span>睡眠记录</span>
+          <div style="float: right">
+            <span>时间范围：</span>
+            <el-radio-group
+              v-model="tableTimeRange"
+              @change="handleTableTimeRangeChange"
+              size="small"
+              style="margin-left: 8px"
+            >
+              <el-radio-button label="7d">近7天</el-radio-button>
+              <el-radio-button label="30d">近30天</el-radio-button>
+              <el-radio-button label="all">全部</el-radio-button>
+            </el-radio-group>
+          </div>
+        </div>
+      </template>
       <el-table
         :data="sortedRecords"
         style="width: 100%"
@@ -341,9 +695,45 @@ onMounted(fetchUserAndRecords);
           label="睡眠时长(小时)"
           sortable="custom"
         />
+        <el-table-column label="状态">
+          <template #default="scope">
+            <el-tag
+              v-if="
+                scope.row.duration && scope.row.duration < DEPRIVATION_THRESHOLD
+              "
+              type="danger"
+              size="small"
+            >
+              睡眠不足
+            </el-tag>
+            <el-tag
+              v-else-if="
+                scope.row.duration &&
+                scope.row.duration < HEALTHY_SLEEP_DURATION
+              "
+              type="warning"
+              size="small"
+            >
+              时长偏低
+            </el-tag>
+            <el-tag v-else type="success" size="small"> 正常 </el-tag>
+          </template>
+        </el-table-column>
       </el-table>
     </el-card>
     <el-card class="mt-4">
+      <div style="margin-bottom: 16px">
+        <span>时间范围：</span>
+        <el-radio-group
+          v-model="timeRange"
+          @change="handleTimeRangeChange"
+          style="margin-left: 8px"
+        >
+          <el-radio-button label="7d">近7天</el-radio-button>
+          <el-radio-button label="30d">近30天</el-radio-button>
+          <el-radio-button label="1y">近一年</el-radio-button>
+        </el-radio-group>
+      </div>
       <v-chart :option="chartOption" style="height: 300px" />
     </el-card>
     <el-card class="mt-4" v-if="showAdvice">
@@ -391,6 +781,28 @@ onMounted(fetchUserAndRecords);
             :class="stdDuration <= 1.5 ? 'good' : 'warning'"
           >
             {{ stdDuration <= 1.5 ? '稳定' : '波动大' }}
+          </div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-label">连续睡眠不足</div>
+          <div class="metric-value">{{ continuousSleepDeprivation }} 天</div>
+          <div
+            class="metric-status"
+            :class="
+              continuousSleepDeprivation < 2
+                ? 'good'
+                : continuousSleepDeprivation < CONTINUOUS_DAYS_THRESHOLD
+                  ? 'warning'
+                  : 'danger'
+            "
+          >
+            {{
+              continuousSleepDeprivation < 2
+                ? '正常'
+                : continuousSleepDeprivation < CONTINUOUS_DAYS_THRESHOLD
+                  ? '需注意'
+                  : '危险'
+            }}
           </div>
         </div>
       </div>

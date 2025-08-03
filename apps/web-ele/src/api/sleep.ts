@@ -5,7 +5,7 @@ export function getCurrentUser() {
   return requestClient.get('/auth/user/profile/');
 }
 
-// 获取一周睡眠记录
+// 获取睡眠记录
 export function getSleepRecords(params: {
   end_date?: string;
   start_date?: string;

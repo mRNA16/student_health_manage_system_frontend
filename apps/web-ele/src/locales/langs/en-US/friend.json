@@ -1,0 +1,20 @@
+{
+  "title": "Friend Management",
+  "search": "Search Username",
+  "add": "Add Friend",
+  "enterUsername": "Enter Username",
+  "myFriends": "My Friends",
+  "sentRequests": "Sent Requests",
+  "receivedRequests": "Received Requests",
+  "username": "Username",
+  "toUser": "Receiver",
+  "fromUser": "Sender",
+  "createdAt": "Requested At",
+  "status": "Status",
+  "actions": "Actions",
+  "viewDetail": "View",
+  "remove": "Remove",
+  "cancel": "Cancel",
+  "accept": "Accept",
+  "reject": "Reject"
+}

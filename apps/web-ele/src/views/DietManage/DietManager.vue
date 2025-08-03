@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 import dayjs from 'dayjs';
 import { ElMessage } from 'element-plus';
@@ -27,6 +27,18 @@ interface MealRecord {
   source: 'ai' | 'manual';
   items: MealItem[];
 }
+interface MealCalories {
+  breakfast: number;
+  lunch: number;
+  dinner: number;
+  total: number;
+}
+interface FoodCalorie {
+  meal: 'breakfast' | 'dinner' | 'lunch';
+  name: string;
+  value: number;
+  color: string;
+}
 
 const user = ref<any>(null);
 const foodList = ref<any[]>([]); // 常见食物
@@ -40,11 +52,22 @@ const form = ref<any>({
   items: [],
 });
 
+const chartType = ref<'line' | 'stackedBar'>('line');
+const timeRange = ref<'1y' | '7d' | '30d'>('7d');
+const selectedPieDate = ref(dayjs().format('YYYY-MM-DD'));
+
 /* 初始化 */
 onMounted(async () => {
   user.value = await getCurrentUser();
   foodList.value = await getFoodList();
-  fetchRecords();
+  await fetchRecords();
+  watch(
+    selectedPieDate,
+    () => {
+      // 触发计算属性更新
+    },
+    { immediate: true },
+  );
 });
 
 async function fetchRecords() {
@@ -95,33 +118,294 @@ async function removeRecord(id: number) {
   }
 }
 
+const getDateRange = computed(() => {
+  const dates: string[] = [];
+  const today = dayjs();
+
+  if (timeRange.value === '7d') {
+    // 近7天
+    for (let i = 6; i >= 0; i--) {
+      dates.push(today.subtract(i, 'day').format('YYYY-MM-DD'));
+    }
+  } else if (timeRange.value === '30d') {
+    // 近30天
+    for (let i = 29; i >= 0; i--) {
+      dates.push(today.subtract(i, 'day').format('YYYY-MM-DD'));
+    }
+  } else {
+    // 近一年（按月份）
+    for (let i = 11; i >= 0; i--) {
+      dates.push(today.subtract(i, 'month').format('YYYY-MM'));
+    }
+  }
+
+  return dates;
+});
+
+// 根据时间范围和原始日期获取分组键
+const getGroupKey = (date: string) => {
+  if (timeRange.value === '1y') {
+    return dayjs(date).format('YYYY-MM');
+  }
+  return date;
+};
+
+const getMealCaloriesByDate = computed(() => {
+  const dateRange = getDateRange.value;
+  const result: Record<string, MealCalories> = {};
+
+  // 初始化每一天的数据
+  dateRange.forEach((date) => {
+    result[date] = {
+      breakfast: 0,
+      lunch: 0,
+      dinner: 0,
+      total: 0,
+    };
+  });
+
+  // 计算每餐的热量
+  recordList.value.forEach((record) => {
+    const groupKey = getGroupKey(record.date);
+    // 只处理当前时间范围内的数据
+    if (!dateRange.includes(groupKey)) return;
+
+    const calories = record.items.reduce(
+      (sum, item) => sum + item.estimated_calories,
+      0,
+    );
+    const dateData = result[groupKey];
+
+    if (dateData) {
+      dateData[record.meal] += calories;
+      // 重新计算总计
+      dateData.total = dateData.breakfast + dateData.lunch + dateData.dinner;
+    }
+  });
+
+  return { dates: dateRange, data: result };
+});
+
 /* 图表 */
-const chartOption = computed(() => ({
-  title: { text: '最近一周热量摄入' },
-  tooltip: {},
-  xAxis: {
-    type: 'category',
-    data: [...new Set(recordList.value.map((r) => r.date))].sort(),
-  },
-  yAxis: { type: 'value', name: '千卡' },
-  series: [
-    {
-      type: 'bar',
-      name: '总热量',
-      data: [...new Set(recordList.value.map((r) => r.date))]
-        .sort()
-        .map((date) =>
-          recordList.value
-            .filter((r) => r.date === date)
-            .reduce(
-              (sum, r) =>
-                sum + r.items.reduce((s, i) => s + i.estimated_calories, 0),
-              0,
-            ),
-        ),
+const trendChartOption = computed(() => {
+  const { dates, data } = getMealCaloriesByDate.value;
+
+  const titleMap = {
+    '7d': '近7天卡路里摄入趋势图',
+    '30d': '近30天卡路里摄入趋势图',
+    '1y': '近一年卡路里摄入趋势图',
+  };
+
+  // 通用配置
+  const baseOption = {
+    title: { text: titleMap[timeRange.value] },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'shadow',
+      },
     },
-  ],
-}));
+    legend: {
+      data: ['早餐', '午餐', '晚餐', '总摄入'],
+    },
+    xAxis: {
+      type: 'category',
+      data: dates,
+      axisLabel: {
+        rotate: timeRange.value === '1y' ? 30 : 0,
+      },
+    },
+    yAxis: {
+      type: 'value',
+      name: '千卡',
+    },
+  };
+
+  // 折线图配置
+  if (chartType.value === 'line') {
+    return {
+      ...baseOption,
+      series: [
+        {
+          name: '早餐',
+          type: 'line',
+          // 使用?.和??确保即使data[date]不存在也会返回0
+          data: dates.map((date) => data[date]?.breakfast ?? 0),
+          lineStyle: { color: '#4E79A7' },
+          itemStyle: { color: '#4E79A7' },
+        },
+        {
+          name: '午餐',
+          type: 'line',
+          data: dates.map((date) => data[date]?.lunch ?? 0),
+          lineStyle: { color: '#F28E2C' },
+          itemStyle: { color: '#F28E2C' },
+        },
+        {
+          name: '晚餐',
+          type: 'line',
+          data: dates.map((date) => data[date]?.dinner ?? 0),
+          lineStyle: { color: '#E15759' },
+          itemStyle: { color: '#E15759' },
+        },
+        {
+          name: '总摄入',
+          type: 'line',
+          data: dates.map((date) => data[date]?.total ?? 0),
+          lineStyle: { color: '#76B7B2', width: 2 },
+          itemStyle: { color: '#76B7B2' },
+          emphasis: { focus: 'series' },
+        },
+      ],
+    };
+  }
+
+  // 堆叠柱状图配置
+  return {
+    ...baseOption,
+    series: [
+      {
+        name: '早餐',
+        type: 'bar',
+        stack: 'total',
+        data: dates.map((date) => data[date]?.breakfast ?? 0),
+        itemStyle: { color: '#4E79A7' },
+      },
+      {
+        name: '午餐',
+        type: 'bar',
+        stack: 'total',
+        data: dates.map((date) => data[date]?.lunch ?? 0),
+        itemStyle: { color: '#F28E2C' },
+      },
+      {
+        name: '晚餐',
+        type: 'bar',
+        stack: 'total',
+        data: dates.map((date) => data[date]?.dinner ?? 0),
+        itemStyle: { color: '#E15759' },
+      },
+    ],
+  };
+});
+
+const mealColors = {
+  breakfast: '#4E79A7',
+  lunch: '#F28E2C',
+  dinner: '#E15759',
+};
+const selectedDateFoodCalories = computed<FoodCalorie[]>(() => {
+  const targetDate = selectedPieDate.value;
+  const targetRecords = recordList.value.filter((r) => r.date === targetDate);
+
+  const foodCalories: FoodCalorie[] = [];
+
+  // 遍历当天所有记录
+  targetRecords.forEach((record) => {
+    // 遍历记录中的每个食物
+    record.items.forEach((item) => {
+      // 查找食物名称
+      const food = foodList.value.find((f) => f.id === item.food);
+      if (food) {
+        foodCalories.push({
+          meal: record.meal,
+          name: food.name, // 食物名称
+          value: item.estimated_calories, // 单个食物的卡路里
+          color: mealColors[record.meal], // 根据餐次获取颜色
+        });
+      }
+    });
+  });
+
+  return foodCalories;
+});
+
+// 3. 生成饼图配置
+const selectedDatePieChartOption = computed(() => {
+  const data = selectedDateFoodCalories.value;
+  const selectedDate = selectedPieDate.value;
+
+  const mealLegendData = [
+    { name: '早餐', color: mealColors.breakfast },
+    { name: '午餐', color: mealColors.lunch },
+    { name: '晚餐', color: mealColors.dinner },
+  ];
+
+  return {
+    graphic: mealLegendData.map((item, index) => ({
+      type: 'group',
+      left: 20,
+      top: 60 + index * 30, // 垂直方向排列，间隔30px
+      children: [
+        {
+          type: 'rect',
+          width: 12,
+          height: 12,
+          fill: item.color, // 使用对应餐次的颜色
+        },
+        {
+          type: 'text',
+          left: 18,
+          top: 'middle',
+          style: {
+            text: item.name,
+            fontSize: 12,
+            fill: '#333',
+          },
+        },
+      ],
+    })),
+    title: {
+      text: `${selectedDate} 卡路里摄入明细`,
+      left: 'center',
+    },
+    tooltip: {
+      trigger: 'item',
+      formatter: '{a} <br/>{b}: {c} 千卡 ({d}%)',
+    },
+    series: [
+      {
+        name: '食物',
+        type: 'pie',
+        radius: ['40%', '70%'],
+        avoidLabelOverlap: false,
+        itemStyle: {
+          borderRadius: 10,
+          borderColor: '#fff',
+          borderWidth: 2,
+          // 根据数据中的颜色设置每个扇形
+          color: (params: any) => {
+            const item = data[params.dataIndex];
+            return item ? item.color : '#ccc';
+          },
+        },
+        label: {
+          show: false,
+          position: 'center',
+        },
+        emphasis: {
+          label: {
+            show: true,
+            fontSize: 16,
+            fontWeight: 'bold',
+          },
+        },
+        labelLine: {
+          show: false,
+        },
+        // 饼图数据（每个食物单独一项）
+        data: data.map((item) => ({
+          name: item.name,
+          value: item.value,
+        })),
+      },
+    ],
+  };
+});
+
+const hasSelectedDateData = computed(() => {
+  return selectedDateFoodCalories.value.length > 0;
+});
 </script>
 
 <template>
@@ -183,7 +467,62 @@ const chartOption = computed(() => ({
 
     <!-- 图表 -->
     <el-card class="mt-4">
-      <v-chart :option="chartOption" style="height: 300px" />
+      <div
+        class="chart-controls"
+        style="
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 16px;
+        "
+      >
+        <div>
+          <span>时间范围：</span>
+          <el-radio-group v-model="timeRange" size="small">
+            <el-radio-button label="7d">近7天</el-radio-button>
+            <el-radio-button label="30d">近30天</el-radio-button>
+            <el-radio-button label="1y">近一年</el-radio-button>
+          </el-radio-group>
+        </div>
+        <div>
+          <span>图表类型：</span>
+          <el-radio-group v-model="chartType" size="small">
+            <el-radio-button label="line">折线图</el-radio-button>
+            <el-radio-button label="stackedBar">堆叠柱状图</el-radio-button>
+          </el-radio-group>
+        </div>
+      </div>
+      <v-chart :option="trendChartOption" style="height: 300px" />
+    </el-card>
+
+    <el-card class="mt-4">
+      <div style="margin-bottom: 16px; text-align: right">
+        <span>选择日期：</span>
+        <el-date-picker
+          v-model="selectedPieDate"
+          type="date"
+          value-format="YYYY-MM-DD"
+          placeholder="选择日期"
+          style="width: 180px"
+        />
+      </div>
+      <v-chart
+        :option="selectedDatePieChartOption"
+        style="height: 400px"
+        v-if="hasSelectedDateData"
+      />
+      <div
+        style="
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          height: 400px;
+          color: #666;
+        "
+        v-else
+      >
+        该日期暂无饮食记录
+      </div>
     </el-card>
 
     <!-- 弹窗 -->
@@ -272,5 +611,15 @@ const chartOption = computed(() => ({
 <style scoped>
 .mt-4 {
   margin-top: 16px;
+}
+
+.chart-controls {
+  margin-bottom: 16px;
+}
+
+.chart-controls > div {
+  display: flex;
+  gap: 10px;
+  align-items: center;
 }
 </style>

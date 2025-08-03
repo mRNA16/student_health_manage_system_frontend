@@ -26,14 +26,20 @@ export default defineComponent({
     const user = ref<any>(null);
     const caloriesPreview = ref(0);
 
+    const continuousLowActivityDays = ref(0); // 连续低运动量天数
+    const showActivityWarning = ref(false); // 是否显示运动警告
+
     // 图表相关引用
     const weekChartRef = ref(); // 周折线图引用
     const dayPieChartRef = ref(); // 日饼图引用
     const { renderEcharts: renderWeekChart } = useEcharts(weekChartRef); // 周图表渲染函数
     const { renderEcharts: renderDayPieChart } = useEcharts(dayPieChartRef); // 日图表渲染函数
     const selectedDate = ref(dayjs().format('YYYY-MM-DD'));
-    const timeRange = ref('7d'); // 默认近7天
+    const timeRange = ref<'1y' | '7d' | '30d'>('7d'); // 默认近7天
 
+    const LOW_ACTIVITY_THRESHOLD = 170; // 低运动量阈值（卡路里）
+    const MONTHLY_LOW_ACTIVITY_THRESHOLD = LOW_ACTIVITY_THRESHOLD * 30;
+    const CONTINUOUS_DAYS_THRESHOLD = 3; // 连续天数阈值
     const form = ref({
       id: 0,
       date: '',
@@ -68,6 +74,60 @@ export default defineComponent({
 
       renderWeekCaloriesChart();
       renderDailyPieChart();
+      checkContinuousLowActivity();
+    };
+
+    const checkContinuousLowActivity = () => {
+      // 按日期分组计算每天的总卡路里消耗
+      const dailyCalories: Record<string, number> = {};
+
+      // 为recordList添加明确的类型断言
+      const records = recordList.value as Array<{
+        calories: number;
+        date: string;
+      }>;
+
+      records.forEach((record) => {
+        const date = record.date;
+        if (typeof date !== 'string') return;
+        dailyCalories[date] =
+          (dailyCalories[date] ?? 0) + (record.calories || 0);
+      });
+
+      // 获取最近14天的日期列表
+      const recentDates = Array.from({ length: 14 }, (_, i) =>
+        dayjs().subtract(i, 'day').format('YYYY-MM-DD'),
+      ).reverse();
+
+      // 检查连续低运动量天数
+      let currentStreak = 0;
+      let maxStreak = 0;
+
+      recentDates.forEach((date) => {
+        const calories = dailyCalories[date] || 0;
+        if (calories < LOW_ACTIVITY_THRESHOLD) {
+          currentStreak++;
+          maxStreak = Math.max(maxStreak, currentStreak);
+        } else {
+          currentStreak = 0;
+        }
+      });
+
+      continuousLowActivityDays.value = maxStreak;
+
+      // 如果达到预警阈值，显示警告
+      if (maxStreak >= CONTINUOUS_DAYS_THRESHOLD) {
+        showActivityWarning.value = true;
+        // 显示警告消息
+        ElMessage({
+          message: `⚠️ 运动警告：您已连续${maxStreak}天运动量过低（少于${LOW_ACTIVITY_THRESHOLD}千卡）！`,
+          type: 'warning',
+          duration: 5000, // 5秒后自动关闭
+          showClose: true, // 允许手动关闭
+        });
+      } else {
+        showActivityWarning.value = false;
+      }
     };
 
     const openAddDialog = () => {
@@ -213,11 +273,15 @@ export default defineComponent({
         '30d': '近30天卡路里消耗趋势',
         '1y': '近1年卡路里消耗趋势',
       };
-      const timeRange = ref<'1y' | '7d' | '30d'>('7d');
+      const currentRange = timeRange.value as keyof typeof titleMap;
+      const currentThreshold =
+        timeRange.value === '1y'
+          ? MONTHLY_LOW_ACTIVITY_THRESHOLD
+          : LOW_ACTIVITY_THRESHOLD;
 
       renderWeekChart({
         title: {
-          text: titleMap[timeRange.value],
+          text: titleMap[currentRange],
           left: 'center',
           textStyle: {
             fontSize: 16,
@@ -260,7 +324,14 @@ export default defineComponent({
               color: '#409eff',
             },
             itemStyle: {
-              color: '#409eff',
+              color(params) {
+                const value = Number(params.value);
+                // 处理可能的NaN情况，默认为红色
+                if (Number.isNaN(value)) {
+                  return '#fa541c';
+                }
+                return value < currentThreshold ? '#fa541c' : '#67c23a';
+              },
             },
             areaStyle: {
               color: {
@@ -278,12 +349,29 @@ export default defineComponent({
             emphasis: {
               scale: true, // 鼠标 hover 时放大数据点
             },
+            markLine: {
+              symbol: 'none',
+              lineStyle: {
+                type: 'dashed', // 虚线
+                color: '#fa541c',
+                width: 2, // 加粗
+              },
+              data: [
+                {
+                  yAxis: currentThreshold, // 使用定义的阈值
+                  label: {
+                    show: false, // 不显示标签
+                  },
+                },
+              ],
+            },
           },
         ],
       });
     };
 
-    const handleTimeRangeChange = () => {
+    const handleTimeRangeChange = (value: '1y' | '7d' | '30d') => {
+      timeRange.value = value;
       // 范围变化时重新渲染折线图
       renderWeekCaloriesChart();
     };
@@ -389,7 +477,7 @@ export default defineComponent({
       });
     };
 
-    // 新增：计算是否显示当天饼图
+    // 计算是否显示当天饼图
     const showSelectedDatePieChart = computed(() => {
       return getSelectedDateSportData() !== null;
     });
@@ -398,12 +486,24 @@ export default defineComponent({
       renderDailyPieChart();
     };
 
+    const generateActivityAdvice = computed(() => {
+      if (continuousLowActivityDays.value < CONTINUOUS_DAYS_THRESHOLD) {
+        return [];
+      }
+
+      return [
+        `• 您已连续${continuousLowActivityDays.value}天运动量不足，建议增加日常活动`,
+        '• 可以尝试每天进行30分钟中等强度运动，如快走、慢跑或骑自行车',
+        '• 工作间隙可进行简单伸展，每小时起身活动5分钟',
+        `• 目标是每天消耗至少${LOW_ACTIVITY_THRESHOLD}千卡`,
+      ];
+    });
+
     onMounted(async () => {
       await fetchUser();
       await fetchSportList();
       await fetchRecordList();
       renderWeekCaloriesChart();
-      watch(timeRange, handleTimeRangeChange, { immediate: true });
       renderDailyPieChart();
       watch(selectedDate, handleDateChange, { immediate: true });
     });
@@ -426,6 +526,11 @@ export default defineComponent({
       handleDateChange,
       timeRange,
       handleTimeRangeChange,
+      continuousLowActivityDays,
+      showActivityWarning,
+      LOW_ACTIVITY_THRESHOLD,
+      MONTHLY_LOW_ACTIVITY_THRESHOLD,
+      generateActivityAdvice,
     };
   },
 });
@@ -433,6 +538,34 @@ export default defineComponent({
 
 <template>
   <div class="sport-manager">
+    <el-card
+      v-if="showActivityWarning"
+      class="mt-4"
+      shadow="always"
+      style="border-left: 4px solid #fa541c"
+    >
+      <div style="display: flex; align-items: center; color: #fa541c">
+        <el-icon style="margin-right: 8px"><WarningFilled /></el-icon>
+        <div>
+          <strong>运动警告：</strong>
+          您已连续{{ continuousLowActivityDays }}天运动量过低（少于{{
+            LOW_ACTIVITY_THRESHOLD
+          }}千卡），长期低活动量可能影响健康，请适当增加运动！
+        </div>
+      </div>
+
+      <div style=" padding-left: 24px;margin-top: 10px">
+        <ul>
+          <li
+            v-for="(advice, index) in generateActivityAdvice"
+            :key="index"
+            style="margin: 5px 0; color: #666"
+          >
+            {{ advice }}
+          </li>
+        </ul>
+      </div>
+    </el-card>
     <el-card>
       <template #header>
         <div class="clearfix">
@@ -478,7 +611,6 @@ export default defineComponent({
           "
         >
           <span>卡路里消耗趋势</span>
-          <!-- 添加时间范围选择器 -->
           <el-select
             v-model="timeRange"
             placeholder="选择时间范围"
@@ -492,6 +624,20 @@ export default defineComponent({
         </div>
       </template>
       <EchartsUI ref="weekChartRef" style="height: 300px" />
+      <div
+        style="
+          margin-top: 8px;
+          font-size: 12px;
+          color: #fa541c;
+          text-align: right;
+        "
+      >
+        虚线为低运动量阈值（{{
+          timeRange === '1y'
+            ? MONTHLY_LOW_ACTIVITY_THRESHOLD
+            : LOW_ACTIVITY_THRESHOLD
+        }}千卡/{{ timeRange === '1y' ? '月' : '天' }}）
+      </div>
     </el-card>
 
     <el-card class="mt-4">
@@ -570,6 +716,17 @@ export default defineComponent({
         <el-form-item label="预计消耗卡路里">
           <div style="font-weight: bold; color: #409eff">
             {{ caloriesPreview }} kcal
+          </div>
+        </el-form-item>
+        <el-form-item>
+          <el-progress
+            :percentage="
+              Math.min(100, (caloriesPreview / LOW_ACTIVITY_THRESHOLD) * 100)
+            "
+            stroke-width="6"
+          />
+          <div style=" margin-top: 5px;font-size: 12px; color: #666">
+            今日建议运动量：{{ LOW_ACTIVITY_THRESHOLD }}千卡
           </div>
         </el-form-item>
       </el-form>

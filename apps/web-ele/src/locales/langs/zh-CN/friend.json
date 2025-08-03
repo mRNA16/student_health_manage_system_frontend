@@ -1,0 +1,20 @@
+{
+  "title": "好友管理",
+  "search": "搜索用户名",
+  "add": "添加好友",
+  "enterUsername": "请输入用户名",
+  "myFriends": "我的好友",
+  "sentRequests": "已发送请求",
+  "receivedRequests": "收到的请求",
+  "username": "用户名",
+  "toUser": "接收方",
+  "fromUser": "发送方",
+  "createdAt": "请求时间",
+  "status": "状态",
+  "actions": "操作",
+  "viewDetail": "查看",
+  "remove": "移除",
+  "cancel": "取消请求",
+  "accept": "接受",
+  "reject": "拒绝"
+}
