@@ -8,6 +8,7 @@ import {
   addMealRecord,
   deleteMealRecord,
   getCurrentUser,
+  getDietAnalysis,
   getFoodList,
   getMealRecords,
   updateMealRecord,
@@ -40,6 +41,7 @@ interface FoodCalorie {
   color: string;
 }
 
+const analysisData = ref<any>({});
 const user = ref<any>(null);
 const foodList = ref<any[]>([]); // 常见食物
 const recordList = ref<MealRecord[]>([]); // 饮食记录
@@ -56,19 +58,43 @@ const chartType = ref<'line' | 'stackedBar'>('line');
 const timeRange = ref<'1y' | '7d' | '30d'>('7d');
 const selectedPieDate = ref(dayjs().format('YYYY-MM-DD'));
 
+watch(timeRange, fetchDietAnalysis);
+
 /* 初始化 */
 onMounted(async () => {
   user.value = await getCurrentUser();
   foodList.value = await getFoodList();
   await fetchRecords();
-  watch(
-    selectedPieDate,
-    () => {
-      // 触发计算属性更新
-    },
-    { immediate: true },
-  );
+  await fetchDietAnalysis();
+  watch(selectedPieDate, () => {}, { immediate: true });
 });
+
+async function fetchDietAnalysis() {
+  const today = dayjs();
+  let end, start;
+  switch (timeRange.value) {
+    case '1y': {
+      start = today.subtract(1, 'y').startOf('day');
+      end = today.endOf('day');
+      break;
+    }
+    case '7d': {
+      start = today.subtract(6, 'd').startOf('day');
+      end = today.endOf('day');
+      break;
+    }
+    case '30d': {
+      start = today.subtract(29, 'd').startOf('day');
+      end = today.endOf('day');
+      break;
+    }
+  }
+  const res = await getDietAnalysis({
+    start_date: start.format('YYYY-MM-DD'),
+    end_date: end.format('YYYY-MM-DD'),
+  });
+  analysisData.value = res;
+}
 
 async function fetchRecords() {
   const res = await getMealRecords();
@@ -151,23 +177,35 @@ const getGroupKey = (date: string) => {
 };
 
 const getMealCaloriesByDate = computed(() => {
+  const backend = analysisData.value?.dailyData;
   const dateRange = getDateRange.value;
-  const result: Record<string, MealCalories> = {};
 
-  // 初始化每一天的数据
+  // 优先后端
+  if (Array.isArray(backend) && backend.length > 0) {
+    const result: Record<string, MealCalories> = {};
+    dateRange.forEach((d) => {
+      result[d] = { breakfast: 0, lunch: 0, dinner: 0, total: 0 };
+    });
+    backend.forEach((day: any) => {
+      const key = timeRange.value === '1y' ? day.date.slice(0, 7) : day.date;
+      if (!result[key]) return;
+      result[key].breakfast += day.breakfast || 0;
+      result[key].lunch += day.lunch || 0;
+      result[key].dinner += day.dinner || 0;
+      result[key].total += day.total || 0;
+    });
+
+    return { dates: dateRange, data: result };
+  }
+
+  // 后端无数据时，回退到原有前端计算
+  const result: Record<string, MealCalories> = {};
   dateRange.forEach((date) => {
-    result[date] = {
-      breakfast: 0,
-      lunch: 0,
-      dinner: 0,
-      total: 0,
-    };
+    result[date] = { breakfast: 0, lunch: 0, dinner: 0, total: 0 };
   });
 
-  // 计算每餐的热量
   recordList.value.forEach((record) => {
     const groupKey = getGroupKey(record.date);
-    // 只处理当前时间范围内的数据
     if (!dateRange.includes(groupKey)) return;
 
     const calories = record.items.reduce(
@@ -175,10 +213,8 @@ const getMealCaloriesByDate = computed(() => {
       0,
     );
     const dateData = result[groupKey];
-
     if (dateData) {
       dateData[record.meal] += calories;
-      // 重新计算总计
       dateData.total = dateData.breakfast + dateData.lunch + dateData.dinner;
     }
   });
@@ -339,9 +375,8 @@ const selectedDatePieChartOption = computed(() => {
       children: [
         {
           type: 'rect',
-          width: 12,
-          height: 12,
-          fill: item.color, // 使用对应餐次的颜色
+          shape: { width: 12, height: 12 },
+          style: { fill: item.color },
         },
         {
           type: 'text',

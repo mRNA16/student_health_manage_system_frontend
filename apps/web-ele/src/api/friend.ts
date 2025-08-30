@@ -33,8 +33,8 @@ export const fetchFriendDetail = async (
     timestamp: string;
     type: string;
   }[];
-  id: number;
-  username: string;
+  friendId: number;
+  friendName: string;
 }> => {
   return requestClient.get(`/friend/${friendId}/`);
 };

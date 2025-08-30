@@ -174,6 +174,14 @@ const viewFriendDetail = (friendId: number) => {
 
 <template>
   <div class="friend-manager-container">
+    <el-button
+      type="primary"
+      @click="openAddFriendDialog"
+      :icon="Plus"
+      class="add-friend-btn"
+    >
+      {{ $t('friend.add') }}
+    </el-button>
     <div class="header">
       <h2>{{ $t('friend.title') }}</h2>
       <el-input
@@ -183,9 +191,6 @@ const viewFriendDetail = (friendId: number) => {
         prefix-icon="Search"
         clearable
       />
-      <el-button type="primary" @click="openAddFriendDialog" :icon="Plus">
-        {{ $t('friend.add') }}
-      </el-button>
     </div>
 
     <el-tabs
@@ -332,13 +337,21 @@ const viewFriendDetail = (friendId: number) => {
 
 <style scoped>
 .friend-manager-container {
+  position: relative;
   padding: 24px;
+}
+
+.add-friend-btn {
+  position: absolute;
+  top: 24px;
+  right: 24px;
 }
 
 .header {
   display: flex;
   gap: 16px;
   align-items: center;
+  padding-right: 120px;
   margin-bottom: 20px;
 }
 

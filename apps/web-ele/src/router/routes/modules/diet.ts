@@ -11,17 +11,7 @@ const routes: RouteRecordRaw[] = [
     },
     name: 'DietManager',
     path: '/diet',
-    children: [
-      {
-        name: 'DietManagerIndex',
-        path: '',
-        component: () => import('#/views/DietManage/DietManager.vue'),
-        meta: {
-          icon: 'mdi:food',
-          title: $t('diet.title'),
-        },
-      },
-    ],
+    component: () => import('#/views/DietManage/DietManager.vue'),
   },
 ];
 

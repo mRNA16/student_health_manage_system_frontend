@@ -46,3 +46,10 @@ export function deleteMealRecord(id: number) {
 export function getFoodList() {
   return requestClient.get('/diet/list');
 }
+
+export function getDietAnalysis(params: {
+  end_date: string;
+  start_date: string;
+}) {
+  return requestClient.get('/diet/records/analysis/', { params });
+}

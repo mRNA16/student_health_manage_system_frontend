@@ -6,7 +6,7 @@ import type {
   WorkbenchTrendItem,
 } from '@vben/common-ui';
 
-import { ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import {
@@ -21,7 +21,42 @@ import { preferences } from '@vben/preferences';
 import { useUserStore } from '@vben/stores';
 import { openWindow } from '@vben/utils';
 
+import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+
+import { getMealRecords } from '../../../api/diet';
+import { getSleepRecords } from '../../../api/sleep';
+import { getRecordList } from '../../../api/sport';
 import AnalyticsVisitsSource from '../analytics/analytics-visits-source.vue';
+
+dayjs.extend(relativeTime);
+
+interface SportRecord {
+  id: number;
+  date: string;
+  sport_type: string;
+  duration: number;
+  calories_burned: number;
+}
+
+// 定义睡眠记录类型接口
+interface SleepRecord {
+  id: number;
+  date: string;
+  sleep_time: string;
+  wake_time: string;
+  duration: number;
+}
+
+// 定义饮食记录类型接口
+interface DietRecord {
+  id: number;
+  date: string;
+  meal: 'breakfast' | 'dinner' | 'lunch';
+  items: {
+    estimated_calories: number;
+  }[];
+}
 
 const userStore = useUserStore();
 
@@ -89,41 +124,105 @@ const projectItems: WorkbenchProjectItem[] = [
 const quickNavItems: WorkbenchQuickNavItem[] = [
   {
     color: '#1fdaca',
-    icon: 'ion:home-outline',
-    title: '首页',
-    url: '/',
-  },
-  {
-    color: '#bf0c2c',
-    icon: 'ion:grid-outline',
-    title: '仪表盘',
-    url: '/dashboard',
-  },
-  {
-    color: '#e18525',
-    icon: 'ion:layers-outline',
-    title: '组件',
-    url: '/demos/features/icons',
-  },
-  {
-    color: '#3fb27f',
-    icon: 'ion:settings-outline',
-    title: '系统管理',
-    url: '/demos/features/login-expired', // 这里的 URL 是示例，实际项目中需要根据实际情况进行调整
+    icon: 'mdi:bed',
+    title: '睡眠管理',
+    url: '/sleep',
   },
   {
     color: '#4daf1bc9',
-    icon: 'ion:key-outline',
-    title: '权限管理',
-    url: '/demos/access/page-control',
+    icon: 'mdi:run',
+    title: '运动管理',
+    url: '/sport',
+  },
+  {
+    color: '#e18525',
+    icon: 'mdi:food',
+    title: '饮食管理',
+    url: '/diet',
+  },
+  {
+    color: '#bf0c2c',
+    icon: 'mdi:account-multiple',
+    title: '好友管理',
+    url: '/friend', // 这里的 URL 是示例，实际项目中需要根据实际情况进行调整
+  },
+  {
+    color: '#3fb27f',
+    icon: 'mdi:chart-line',
+    title: '健康报告',
+    url: '/health-report',
   },
   {
     color: '#00d8ff',
     icon: 'ion:bar-chart-outline',
-    title: '图表',
-    url: '/analytics',
+    title: '数据分析',
+    url: '/data-analysis',
   },
 ];
+
+const fetchUserActivities = async () => {
+  try {
+    // 获取各类记录
+    const [sleepRes, dietRes, sportRes] = await Promise.all([
+      getSleepRecords({
+        start_date: dayjs().subtract(7, 'day').format('YYYY-MM-DD'),
+        end_date: dayjs().format('YYYY-MM-DD'),
+      }),
+      getMealRecords(),
+      getRecordList(),
+    ]);
+
+    const activities: WorkbenchTrendItem[] = [];
+
+    // 处理睡眠记录
+    if (sleepRes && sleepRes.length > 0) {
+      (sleepRes as SleepRecord[]).forEach((record) => {
+        activities.push({
+          avatar: `svg:avatar-${userStore.userInfo?.id || 1}`,
+          title: userStore.userInfo?.realName || '我',
+          content: `记录了睡眠数据，从 ${record.sleep_time} 到 ${record.wake_time}，时长 ${record.duration} 小时`,
+          date: dayjs(record.date).fromNow(),
+        });
+      });
+    }
+
+    // 处理饮食记录
+    if (dietRes && dietRes.length > 0) {
+      (dietRes as DietRecord[]).forEach((record) => {
+        const mealMap = {
+          breakfast: '早餐',
+          lunch: '午餐',
+          dinner: '晚餐',
+        };
+        activities.push({
+          avatar: `svg:avatar-${userStore.userInfo?.id || 1}`,
+          title: userStore.userInfo?.realName || '我',
+          content: `记录了${mealMap[record.meal]}，共摄入 ${record.items.reduce((sum, item) => sum + item.estimated_calories, 0)} 千卡`,
+          date: dayjs(record.date).fromNow(),
+        });
+      });
+    }
+
+    // 处理运动记录
+    if (sportRes && sportRes.length > 0) {
+      (sportRes as SportRecord[]).forEach((record) => {
+        activities.push({
+          avatar: `svg:avatar-${userStore.userInfo?.id || 1}`,
+          title: userStore.userInfo?.realName || '我',
+          content: `进行了${record.sport_type}运动，时长${record.duration}分钟，消耗${record.calories_burned}千卡`,
+          date: dayjs(record.date).fromNow(),
+        });
+      });
+    }
+
+    // 按时间排序，最新的在前
+    trendItems.value = activities.sort((a, b) => {
+      return dayjs(b.date).valueOf() - dayjs(a.date).valueOf();
+    });
+  } catch (error) {
+    console.error('获取用户动态失败:', error);
+  }
+};
 
 const todoItems = ref<WorkbenchTodoItem[]>([
   {
@@ -157,62 +256,8 @@ const todoItems = ref<WorkbenchTodoItem[]>([
     title: '修复UI显示问题',
   },
 ]);
-const trendItems: WorkbenchTrendItem[] = [
-  {
-    avatar: 'svg:avatar-1',
-    content: `在 <a>开源组</a> 创建了项目 <a>Vue</a>`,
-    date: '刚刚',
-    title: '威廉',
-  },
-  {
-    avatar: 'svg:avatar-2',
-    content: `关注了 <a>威廉</a> `,
-    date: '1个小时前',
-    title: '艾文',
-  },
-  {
-    avatar: 'svg:avatar-3',
-    content: `发布了 <a>个人动态</a> `,
-    date: '1天前',
-    title: '克里斯',
-  },
-  {
-    avatar: 'svg:avatar-4',
-    content: `发表文章 <a>如何编写一个Vite插件</a> `,
-    date: '2天前',
-    title: 'Vben',
-  },
-  {
-    avatar: 'svg:avatar-1',
-    content: `回复了 <a>杰克</a> 的问题 <a>如何进行项目优化？</a>`,
-    date: '3天前',
-    title: '皮特',
-  },
-  {
-    avatar: 'svg:avatar-2',
-    content: `关闭了问题 <a>如何运行项目</a> `,
-    date: '1周前',
-    title: '杰克',
-  },
-  {
-    avatar: 'svg:avatar-3',
-    content: `发布了 <a>个人动态</a> `,
-    date: '1周前',
-    title: '威廉',
-  },
-  {
-    avatar: 'svg:avatar-4',
-    content: `推送了代码到 <a>Github</a>`,
-    date: '2021-04-01 20:00',
-    title: '威廉',
-  },
-  {
-    avatar: 'svg:avatar-4',
-    content: `发表文章 <a>如何编写使用 Admin Vben</a> `,
-    date: '2021-03-01 20:00',
-    title: 'Vben',
-  },
-];
+
+const trendItems = ref<WorkbenchTrendItem[]>([]);
 
 const router = useRouter();
 
@@ -231,6 +276,10 @@ function navTo(nav: WorkbenchProjectItem | WorkbenchQuickNavItem) {
     console.warn(`Unknown URL for navigation item: ${nav.title} -> ${nav.url}`);
   }
 }
+
+onMounted(() => {
+  fetchUserActivities();
+});
 </script>
 
 <template>
@@ -247,7 +296,11 @@ function navTo(nav: WorkbenchProjectItem | WorkbenchQuickNavItem) {
     <div class="mt-5 flex flex-col lg:flex-row">
       <div class="mr-4 w-full lg:w-3/5">
         <WorkbenchProject :items="projectItems" title="项目" @click="navTo" />
-        <WorkbenchTrends :items="trendItems" class="mt-5" title="最新动态" />
+        <WorkbenchTrends
+          :items="trendItems.slice(0, 10)"
+          class="mt-5"
+          title="最新动态"
+        />
       </div>
       <div class="w-full lg:w-2/5">
         <WorkbenchQuickNav

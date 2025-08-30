@@ -86,7 +86,8 @@
     "vitest": "catalog:",
     "vue": "catalog:",
     "vue-tsc": "catalog:",
-    "vue-charts": "^0.2.1"
+    "vue-charts": "^0.2.1",
+    "@element-plus/icons-vue": "^2.3.2"
   },
   "engines": {
     "node": ">=20.10.0",

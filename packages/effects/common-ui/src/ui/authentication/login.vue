@@ -14,7 +14,6 @@ import { useVbenForm } from '@vben-core/form-ui';
 import { VbenButton, VbenCheckbox } from '@vben-core/shadcn-ui';
 
 import Title from './auth-title.vue';
-import ThirdPartyLogin from './third-party-login.vue';
 
 interface Props extends AuthenticationProps {
   formSchema?: VbenFormSchema[];
@@ -165,11 +164,6 @@ defineExpose({
         {{ $t('authentication.qrcodeLogin') }}
       </VbenButton>
     </div>
-
-    <!-- 第三方登录 -->
-    <slot name="third-party-login">
-      <ThirdPartyLogin v-if="showThirdPartyLogin" />
-    </slot>
 
     <slot name="to-register">
       <div v-if="showRegister" class="mt-3 text-center text-sm">

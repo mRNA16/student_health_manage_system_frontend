@@ -8,6 +8,7 @@ import { initStores } from '@vben/stores';
 import '@vben/styles';
 import '@vben/styles/ele';
 
+import * as ElementPlusIconsVue from '@element-plus/icons-vue';
 import { useTitle } from '@vueuse/core';
 import ElementPlus, { ElLoading } from 'element-plus';
 
@@ -38,6 +39,9 @@ async function bootstrap(namespace: string) {
   //   zIndex: 2000,
   // });
   const app = createApp(App);
+  for (const [key, comp] of Object.entries(ElementPlusIconsVue)) {
+    app.component(key, comp);
+  }
   // 注册Element Plus提供的v-loading指令
   app.component('VChart', VueECharts);
   app.use(ElementPlus);

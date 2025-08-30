@@ -11,17 +11,7 @@ const routes: RouteRecordRaw[] = [
     },
     name: 'SportManager',
     path: '/sport',
-    children: [
-      {
-        name: 'SportManagerIndex',
-        path: '',
-        component: () => import('#/views/SportManage/SportManager.vue'),
-        meta: {
-          icon: 'mdi:run',
-          title: $t('sport.title'),
-        },
-      },
-    ],
+    component: () => import('#/views/SportManage/SportManager.vue'),
   },
 ];
 

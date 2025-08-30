@@ -16,5 +16,6 @@
   "remove": "移除",
   "cancel": "取消请求",
   "accept": "接受",
-  "reject": "拒绝"
+  "reject": "拒绝",
+  "detail": "好友详情"
 }

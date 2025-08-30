@@ -15,6 +15,7 @@ import {
 interface Friend {
   id: number;
   username: string;
+  lastActive?: string;
 }
 
 type Comment = {
@@ -56,9 +57,13 @@ const formatDate = (dateString: string): string => {
 const getFriendDetail = async () => {
   try {
     const response = await fetchFriendDetail(friendId);
-    friend.value.id = response.id;
-    friend.value.username = response.username;
-    activities.value = response.activities || [];
+    friend.value.id = response.friendId;
+    friend.value.username = response.friendName;
+    friend.value.lastActive =
+      response.activities && response.activities.length > 0
+        ? response.activities[0]!.timestamp
+        : undefined;
+    activities.value = response.activities ? [...response.activities] : [];
     for (const activity of activities.value) {
       activity.comments = [];
       activity.newComment = '';
@@ -115,8 +120,18 @@ onMounted(() => {
 <template>
   <div class="friend-detail-container">
     <div class="friend-header">
-      <div class="friend-info">
-        <h2 class="friend-name">{{ friend.username }}</h2>
+      <div class="friend-info-card">
+        <div class="friend-info">
+          <h2 class="friend-name">{{ friend.username }}</h2>
+          <p class="friend-id">ID: {{ friend.id }}</p>
+          <p class="friend-last-active">
+            最近活动:
+            <span v-if="friend.lastActive">{{
+              formatDate(friend.lastActive)
+            }}</span>
+            <span v-else>暂无记录</span>
+          </p>
+        </div>
       </div>
       <div class="action-buttons">
         <el-button type="danger" @click="removeFriend">移除好友</el-button>
@@ -130,6 +145,7 @@ onMounted(() => {
           v-for="activity in activities"
           :key="`${activity.type}-${activity.id}`"
           class="activity-item"
+          :class="`activity-${activity.type}`"
         >
           <div class="activity-type">{{ activity.type }}</div>
           <div class="activity-content">{{ activity.content }}</div>
@@ -176,90 +192,42 @@ onMounted(() => {
 .friend-header {
   display: flex;
   align-items: center;
-  padding: 20px;
+  justify-content: space-between;
+  padding: 0;
   margin-bottom: 20px;
+}
+
+.friend-info-card {
+  flex: 1; /* 占满剩余空间 */
+  padding: 20px;
   background-color: #fff;
   border-radius: 8px;
   box-shadow: 0 2px 12px 0 rgb(0 0 0 / 8%);
 }
 
-.avatar-container {
-  margin-right: 20px;
-}
-
-.avatar {
-  width: 100px;
-  height: 100px;
-  object-fit: cover;
-  border: 3px solid #e6ecf0;
-  border-radius: 50%;
-}
-
-.friend-info {
-  flex: 1;
-}
-
 .friend-name {
-  margin: 0 0 5px;
+  margin: 0 0 10px; /* 增加底部间距 */
   font-size: 24px;
   font-weight: 600;
   color: #333;
 }
 
-.friend-username {
-  margin: 0 0 10px;
+.friend-id {
+  margin: 0 0 5px;
   font-size: 16px;
   color: #657786;
 }
 
-.friend-status {
-  display: inline-block;
-  padding: 3px 10px;
+.friend-last-active {
+  margin: 5px 0 0;
   font-size: 14px;
-  font-weight: 500;
-  border-radius: 15px;
-}
-
-.online {
-  color: #1890ff;
-  background-color: #e6f7ff;
-}
-
-.offline {
-  color: #999;
-  background-color: #f5f5f5;
+  color: #657786;
 }
 
 .action-buttons {
   display: flex;
   gap: 10px;
-}
-
-.friend-stats {
-  display: flex;
-  gap: 20px;
-  margin-bottom: 20px;
-}
-
-.stat-card {
-  flex: 1;
-  padding: 20px;
-  text-align: center;
-  background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px 0 rgb(0 0 0 / 8%);
-}
-
-.stat-value {
-  margin-bottom: 5px;
-  font-size: 32px;
-  font-weight: 700;
-  color: #1890ff;
-}
-
-.stat-label {
-  font-size: 16px;
-  color: #657786;
+  margin-left: 20px;
 }
 
 .friend-activity {
@@ -287,8 +255,34 @@ onMounted(() => {
 .activity-item {
   padding: 15px;
   background-color: #f9fbfd;
-  border-left: 3px solid #1890ff;
   border-radius: 8px;
+}
+
+/* 睡眠活动 - 保持蓝色 */
+.activity-sleep {
+  border-left: 3px solid #1890ff; /* 蓝色 */
+}
+
+.activity-sleep .activity-type {
+  color: #1890ff; /* 蓝色 */
+}
+
+/* 运动活动 - 改为绿色 */
+.activity-sport {
+  border-left: 3px solid #52c41a; /* 绿色 */
+}
+
+.activity-sport .activity-type {
+  color: #52c41a; /* 绿色 */
+}
+
+/* 饮食活动 - 改为黄色 */
+.activity-meal {
+  border-left: 3px solid #faad14; /* 黄色 */
+}
+
+.activity-meal .activity-type {
+  color: #faad14; /* 黄色 */
 }
 
 .activity-type {
@@ -311,5 +305,22 @@ onMounted(() => {
   padding: 30px 0;
   color: #999;
   text-align: center;
+}
+
+.comments {
+  padding-top: 10px;
+  margin-top: 10px;
+  border-top: 1px dashed #e6ecf0;
+}
+
+.comment-item {
+  padding: 5px 0;
+  margin-bottom: 5px;
+}
+
+.comment-form {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
 }
 </style>

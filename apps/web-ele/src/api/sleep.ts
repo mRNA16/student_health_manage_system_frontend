@@ -21,3 +21,10 @@ export function addSleepRecord(data: {
 }) {
   return requestClient.post('/sleep/', data);
 }
+
+export function getSleepAnalysis(params: {
+  end_date: string;
+  start_date: string;
+}) {
+  return requestClient.get('/sleep/analysis/', { params });
+}

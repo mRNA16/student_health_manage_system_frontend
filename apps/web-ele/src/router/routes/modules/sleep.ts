@@ -11,17 +11,7 @@ const routes: RouteRecordRaw[] = [
     },
     name: 'SleepManager',
     path: '/sleep',
-    children: [
-      {
-        name: 'SleepManagerIndex',
-        path: '',
-        component: () => import('#/views/SleepManage/SleepManager.vue'),
-        meta: {
-          icon: 'mdi:bed',
-          title: $t('sleep.title'),
-        },
-      },
-    ],
+    component: () => import('#/views/SleepManage/SleepManager.vue'),
   },
 ];
 

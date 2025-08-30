@@ -554,7 +554,7 @@ export default defineComponent({
         </div>
       </div>
 
-      <div style=" padding-left: 24px;margin-top: 10px">
+      <div style="padding-left: 24px; margin-top: 10px">
         <ul>
           <li
             v-for="(advice, index) in generateActivityAdvice"
@@ -725,7 +725,7 @@ export default defineComponent({
             "
             stroke-width="6"
           />
-          <div style=" margin-top: 5px;font-size: 12px; color: #666">
+          <div style="margin-top: 5px; font-size: 12px; color: #666">
             今日建议运动量：{{ LOW_ACTIVITY_THRESHOLD }}千卡
           </div>
         </el-form-item>

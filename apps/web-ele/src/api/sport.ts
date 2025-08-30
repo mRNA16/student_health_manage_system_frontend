@@ -38,3 +38,10 @@ export function deleteRecord(id: number) {
 export function getSportList() {
   return requestClient.get('/sport/list/');
 }
+
+export function getSportAnalysis(params: {
+  end_date: string;
+  start_date: string;
+}) {
+  return requestClient.get('/sport/records/analysis/', { params });
+}
