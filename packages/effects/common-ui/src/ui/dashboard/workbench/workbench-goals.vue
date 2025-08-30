@@ -80,9 +80,11 @@ function onSave() {
       <div>
         <div class="mb-1 flex items-center justify-between text-sm">
           <span>运动消耗</span>
-          <span v-if="!isEditing">{{ totals.burn }} / {{ goals.burn }} 千卡 ({{
+          <span v-if="!isEditing"
+            >{{ totals.burn }} / {{ goals.burn }} 千卡 ({{
               percents.burn
-            }}%)</span>
+            }}%)</span
+          >
           <span v-else class="flex items-center gap-2">
             目标
             <input
@@ -104,9 +106,11 @@ function onSave() {
       <div>
         <div class="mb-1 flex items-center justify-between text-sm">
           <span>摄入卡路里</span>
-          <span v-if="!isEditing">{{ totals.intake }} / {{ goals.intake }} 千卡 ({{
+          <span v-if="!isEditing"
+            >{{ totals.intake }} / {{ goals.intake }} 千卡 ({{
               percents.intake
-            }}%)</span>
+            }}%)</span
+          >
           <span v-else class="flex items-center gap-2">
             目标
             <input
@@ -128,9 +132,11 @@ function onSave() {
       <div>
         <div class="mb-1 flex items-center justify-between text-sm">
           <span>睡眠时长</span>
-          <span v-if="!isEditing">{{ totals.sleep }} / {{ goals.sleep }} 小时 ({{
+          <span v-if="!isEditing"
+            >{{ totals.sleep }} / {{ goals.sleep }} 小时 ({{
               percents.sleep
-            }}%)</span>
+            }}%)</span
+          >
           <span v-else class="flex items-center gap-2">
             目标
             <input

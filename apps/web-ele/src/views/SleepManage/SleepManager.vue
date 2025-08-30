@@ -191,9 +191,9 @@ const chartOption = computed(() => {
         color:
           item.totalDuration < (data.DEPRIVATION_THRESHOLD || 5)
             ? '#f5222d'
-            : (item.totalDuration < (data.HEALTHY_SLEEP_DURATION || 7)
+            : item.totalDuration < (data.HEALTHY_SLEEP_DURATION || 7)
               ? '#faad14'
-              : '#52c41a'),
+              : '#52c41a',
       },
     }));
     titleText =
@@ -554,6 +554,7 @@ export function getChartOption() {
 .mt-4 {
   margin-top: 16px;
 }
+
 .metrics-container {
   display: flex;
   flex-wrap: wrap;
@@ -562,6 +563,7 @@ export function getChartOption() {
   margin-top: 16px;
   border-bottom: 1px dashed #eee;
 }
+
 .metric-item {
   flex: 1;
   min-width: 150px;
@@ -570,40 +572,48 @@ export function getChartOption() {
   background-color: #f9f9f9;
   border-radius: 6px;
 }
+
 .metric-label {
   margin-bottom: 8px;
   font-size: 14px;
   color: #666;
 }
+
 .metric-value {
   margin-bottom: 4px;
   font-size: 18px;
   font-weight: bold;
   color: #333;
 }
+
 .metric-status {
   display: inline-block;
   padding: 2px 8px;
   font-size: 12px;
   border-radius: 12px;
 }
+
 .metric-status.good {
   color: #52c41a;
   background-color: #e1f3d8;
 }
+
 .metric-status.warning {
   color: #fa541c;
   background-color: #fff2e8;
 }
+
 .metric-status.danger {
   color: #f5222d;
   background-color: #fff1f0;
 }
+
 .issues-container {
   padding-bottom: 16px;
   margin-top: 16px;
   border-bottom: 1px dashed #eee;
 }
+
 .section-title {
   display: flex;
   align-items: center;
@@ -611,6 +621,7 @@ export function getChartOption() {
   font-weight: 500;
   color: #333;
 }
+
 .section-title::before {
   display: inline-block;
   width: 4px;
@@ -620,31 +631,39 @@ export function getChartOption() {
   background-color: #409eff;
   border-radius: 2px;
 }
+
 .no-issues {
   padding: 8px 0;
   color: #666;
 }
+
 .issue-tag {
   margin: 4px 4px 4px 0;
 }
+
 .advice-container {
   margin-top: 16px;
 }
+
 .advice-list {
   padding-left: 20px;
   margin-top: 8px;
 }
+
 .advice-list li {
   margin-bottom: 4px;
   line-height: 1.6;
   color: #666;
 }
+
 .core-advice li {
   color: #389e0d;
 }
+
 .targeted-advice li {
   color: #1890ff;
 }
+
 .tips-advice li {
   color: #fa8c16;
 }
