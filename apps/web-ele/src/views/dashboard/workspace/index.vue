@@ -10,7 +10,6 @@ import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import {
-  AnalysisChartCard,
   WorkbenchHeader,
   WorkbenchProject,
   WorkbenchQuickNav,
@@ -27,7 +26,6 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 import { getMealRecords } from '../../../api/diet';
 import { getSleepRecords } from '../../../api/sleep';
 import { getRecordList } from '../../../api/sport';
-import AnalyticsVisitsSource from '../analytics/analytics-visits-source.vue';
 
 dayjs.extend(relativeTime);
 
@@ -310,9 +308,6 @@ onMounted(() => {
           @click="navTo"
         />
         <WorkbenchTodo :items="todoItems" class="mt-5" title="待办事项" />
-        <AnalysisChartCard class="mt-5" title="访问来源">
-          <AnalyticsVisitsSource />
-        </AnalysisChartCard>
       </div>
     </div>
   </div>

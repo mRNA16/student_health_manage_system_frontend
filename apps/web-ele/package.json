@@ -44,6 +44,7 @@
     "dayjs": "catalog:",
     "echarts": "catalog:",
     "element-plus": "catalog:",
+    "hls.js": "^1.6.15",
     "pinia": "catalog:",
     "vue": "catalog:",
     "vue-echarts": "^7.0.3",

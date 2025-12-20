@@ -42,15 +42,19 @@ const displayFriendsList = computed(() => {
   const keyword = (searchKeyword.value ?? '').toLowerCase();
   return friendsList.value
     .map((item) => {
-      const friendUser =
-        item.from_user?.id === currentUserId.value
-          ? item.to_user
-          : item.from_user;
+      const friendUserId =
+        item.from_user_id === currentUserId.value
+          ? item.to_user_id
+          : item.from_user_id;
+      const friendUserName =
+        item.from_user_id === currentUserId.value
+          ? item.to_username
+          : item.from_username;
 
       return {
         id: item.id, // 关系ID
-        userId: friendUser?.id ?? -1, // 对方ID
-        username: friendUser?.username ?? '',
+        userId: friendUserId ?? -1, // 对方ID
+        username: friendUserName ?? '',
       };
     })
     .filter((f) => f.username.toLowerCase().includes(keyword));
@@ -246,8 +250,8 @@ const viewFriendDetail = (friendId: number) => {
         border
         style="width: 100%"
       >
-        <el-table-column prop="to_user.id" label="ID" width="80" />
-        <el-table-column prop="to_user.username" :label="$t('friend.toUser')" />
+        <el-table-column prop="to_user_id" label="ID" width="80" />
+        <el-table-column prop="to_username" :label="$t('friend.toUser')" />
         <el-table-column prop="created_at" :label="$t('friend.createdAt')" />
         <el-table-column
           prop="status"
@@ -260,13 +264,16 @@ const viewFriendDetail = (friendId: number) => {
           fixed="right"
         >
           <template #default="scope">
-            <el-button
-              type="danger"
-              size="small"
-              @click="cancelRequest(scope.row.id)"
-            >
-              {{ $t('friend.cancel') }}
-            </el-button>
+            <template v-if="scope.row.status === 'pending'">
+              <el-button
+                type="danger"
+                size="small"
+                @click="cancelRequest(scope.row.id)"
+              >
+                {{ $t('friend.cancel') }}
+              </el-button>
+            </template>
+            <span v-else-if="scope.row.status === 'rejected'"> 已被拒绝 </span>
           </template>
         </el-table-column>
       </el-table>
@@ -279,11 +286,8 @@ const viewFriendDetail = (friendId: number) => {
         border
         style="width: 100%"
       >
-        <el-table-column prop="from_user.id" label="ID" width="80" />
-        <el-table-column
-          prop="from_user.username"
-          :label="$t('friend.fromUser')"
-        />
+        <el-table-column prop="from_user_id" label="ID" width="80" />
+        <el-table-column prop="from_username" :label="$t('friend.fromUser')" />
         <el-table-column prop="created_at" :label="$t('friend.createdAt')" />
         <el-table-column
           :label="$t('friend.actions')"
@@ -291,20 +295,23 @@ const viewFriendDetail = (friendId: number) => {
           fixed="right"
         >
           <template #default="scope">
-            <el-button
-              type="success"
-              size="small"
-              @click="acceptRequest(scope.row.id)"
-            >
-              {{ $t('friend.accept') }}
-            </el-button>
-            <el-button
-              type="danger"
-              size="small"
-              @click="rejectRequest(scope.row.id)"
-            >
-              {{ $t('friend.reject') }}
-            </el-button>
+            <template v-if="scope.row.status === 'pending'">
+              <el-button
+                type="success"
+                size="small"
+                @click="acceptRequest(scope.row.id)"
+              >
+                {{ $t('friend.accept') }}
+              </el-button>
+              <el-button
+                type="danger"
+                size="small"
+                @click="rejectRequest(scope.row.id)"
+              >
+                {{ $t('friend.reject') }}
+              </el-button>
+            </template>
+            <span v-else-if="scope.row.status === 'rejected'"> 已拒绝 </span>
           </template>
         </el-table-column>
       </el-table>

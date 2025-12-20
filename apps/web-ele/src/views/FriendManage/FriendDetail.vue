@@ -92,7 +92,7 @@ const loadComments = async (activity: Activity) => {
     const res = await fetchComments(activity.type, activity.id);
     activity.comments = res.map((item) => ({
       id: item.id,
-      username: item.username,
+      username: item.user_name,
       content: item.content,
     }));
   } catch {
@@ -132,9 +132,6 @@ onMounted(() => {
             <span v-else>暂无记录</span>
           </p>
         </div>
-      </div>
-      <div class="action-buttons">
-        <el-button type="danger" @click="removeFriend">移除好友</el-button>
       </div>
     </div>
 

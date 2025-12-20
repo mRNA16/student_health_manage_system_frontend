@@ -13,6 +13,14 @@ import {
 } from '../../api/sleep';
 
 dayjs.extend(isBetween);
+
+// 健康标准常量
+const HEALTHY_SLEEP_DURATION = 7;
+const HEALTHY_BEDTIME = 23.5; // 23:30
+const HEALTHY_WAKETIME = 6.5; // 06:30
+const DEPRIVATION_THRESHOLD = 5;
+const CONTINUOUS_DAYS_THRESHOLD = 4;
+
 // 表单
 const form = ref<{
   date: Date | null;
@@ -28,10 +36,28 @@ const form = ref<{
 const timeRange = ref<'1y' | '7d' | '30d'>('7d');
 const tableTimeRange = ref<'7d' | '30d' | 'all'>('all');
 
-// 睡眠分析数据（全部由后端提供）
-const analysisData = ref<any>({});
+// 睡眠分析数据
+const analysisData = ref<any>({
+  continuousSleepDeprivation: 0,
+  sleepIssues: [],
+  coreAdvice: [],
+  specificAdvice: [],
+  sleepTips: [],
+  dailyData: [],
+  yearlyData: [],
+  HEALTHY_SLEEP_DURATION,
+  DEPRIVATION_THRESHOLD,
+  CONTINUOUS_DAYS_THRESHOLD,
+});
 const allRecords = ref<any[]>([]); // 仅用于表格展示
 const user = ref<any>(null);
+
+// 时间转换助手
+const timeToHours = (timeStr: string) => {
+  if (!timeStr) return 0;
+  const [h, m, s] = timeStr.split(':').map(Number);
+  return h + m / 60 + (s || 0) / 3600;
+};
 
 const getTimeRangeDates = () => {
   const today = dayjs();
@@ -79,6 +105,95 @@ const getTableTimeRangeDates = () => {
   }
 };
 
+// 基于后端传来的指标生成建议
+const generateAdvice = (data: any) => {
+  const issues: string[] = [];
+  const averageTST = Number(data.averageTST || 0);
+  const stdSleepTime = Number(data.stdSleepTime || 0);
+  const stdWakeTime = Number(data.stdWakeTime || 0);
+  const stdDuration = Number(data.stdDuration || 0);
+  const continuousDays = Number(data.continuousSleepDeprivation || 0);
+
+  // 1. 睡眠问题标签
+  if (averageTST < HEALTHY_SLEEP_DURATION) {
+    issues.push(
+      `睡眠时长不足（平均${averageTST.toFixed(1)}小时，建议至少${HEALTHY_SLEEP_DURATION}小时）`,
+    );
+  }
+  if (stdSleepTime > 1.5) issues.push('入睡时间不规律（波动较大）');
+  if (stdWakeTime > 1.5) issues.push('起床时间不规律（波动较大）');
+  if (stdDuration > 1.5) issues.push('睡眠时长不稳定（可能存在睡眠中断）');
+
+  // 检查最新一条记录
+  const latest = allRecords.value[allRecords.value.length - 1];
+  if (latest) {
+    const s = timeToHours(latest.sleep_time);
+    const w = timeToHours(latest.wake_time);
+    if (s > HEALTHY_BEDTIME || (s >= 0 && s < 4)) {
+      issues.push('入睡时间较晚（建议不晚于23:30）');
+    }
+    if (w < HEALTHY_WAKETIME) {
+      issues.push('起床时间较早（建议不早于06:00）');
+    }
+  }
+
+  // 2. 核心建议
+  const coreAdvice = [
+    '1. 锚定起床时间：每天固定同一时间起床。',
+    '2. 循序渐进调整：每天提前15分钟入睡。',
+    '3. 建立睡前仪式：睡前1小时进行放松活动。',
+  ];
+
+  // 3. 针对性建议
+  const specificAdvice: string[] = [];
+  if (continuousDays >= CONTINUOUS_DAYS_THRESHOLD) {
+    specificAdvice.push(
+      `• 紧急调整：未来2天尽量保证至少${HEALTHY_SLEEP_DURATION}小时睡眠。`,
+    );
+  }
+  if (averageTST < HEALTHY_SLEEP_DURATION) {
+    specificAdvice.push(
+      '• 逐步提前入睡时间，每次15分钟，直至达到目标睡眠时长。',
+    );
+  }
+  if (stdSleepTime > 1.5 || stdWakeTime > 1.5) {
+    specificAdvice.push('• 设置“睡前提醒”闹闹钟，提前1小时准备入睡。');
+  }
+  if (stdDuration > 1.5) {
+    specificAdvice.push('• 优化睡眠环境，避免夜间易醒。');
+  }
+  if (latest) {
+    const s = timeToHours(latest.sleep_time);
+    if (s > HEALTHY_BEDTIME || (s >= 0 && s < 4)) {
+      specificAdvice.push('• 睡前1小时远离电子设备。');
+    }
+  }
+  if (specificAdvice.length === 0) {
+    specificAdvice.push('• 保持规律进餐和适度运动。');
+  }
+
+  // 4. 睡眠小贴士
+  const allTips = [
+    '• 试试“478呼吸法”：吸气4秒→屏息7秒→呼气8秒。',
+    '• 白天晒10-15分钟太阳，有助于调节生物钟。',
+    '• 卧室可放薰衣草，有助于放松入睡。',
+    '• 夜间醒来不要看时间，闭眼深呼吸。',
+    '• 选择舒适寝具，提升睡眠质量。',
+  ];
+  const sleepTips = [...allTips].sort(() => 0.5 - Math.random()).slice(0, 3);
+
+  return {
+    ...data,
+    sleepIssues: issues,
+    coreAdvice,
+    specificAdvice,
+    sleepTips,
+    HEALTHY_SLEEP_DURATION,
+    DEPRIVATION_THRESHOLD,
+    CONTINUOUS_DAYS_THRESHOLD,
+  };
+};
+
 // 获取分析数据和全部记录
 const fetchAll = async () => {
   try {
@@ -90,10 +205,13 @@ const fetchAll = async () => {
       end_date: dayjs().format('YYYY-MM-DD'),
     });
     allRecords.value = allRes || [];
-    // 分析数据
+
+    // 获取后端分析数据
     const { start, end } = getTimeRangeDates();
     const res = await getSleepAnalysis({ start_date: start, end_date: end });
-    analysisData.value = res;
+
+    // 在前端生成建议
+    analysisData.value = generateAdvice(res);
   } catch {
     ElMessage.error('获取数据失败');
   }
@@ -165,7 +283,7 @@ const sortedRecords = computed(() => {
 
 const handleTimeRangeChange = (value: '1y' | '7d' | '30d') => {
   timeRange.value = value;
-  fetchAll();
+  fetchAll(); // 切换范围时重新请求后端分析
 };
 const handleTableTimeRangeChange = (value: '7d' | '30d' | 'all') => {
   tableTimeRange.value = value;
@@ -218,7 +336,7 @@ const chartOption = computed(() => {
   };
 });
 
-const checkLowSleep = async () => {
+const checkLowSleep = () => {
   if (
     analysisData.value.continuousSleepDeprivation >=
     (analysisData.value.CONTINUOUS_DAYS_THRESHOLD || 4)
@@ -234,15 +352,13 @@ const checkLowSleep = async () => {
 
 onMounted(async () => {
   await fetchAll();
-  await checkLowSleep();
+  checkLowSleep();
 });
 </script>
 
 <script lang="ts">
 // 图表配置函数（放在<script setup>外部，避免响应式污染）
 export function getChartOption() {
-  // 这里假设 analysisData.value 已经有数据
-  // 你可以根据实际情况调整颜色、样式等
   const data = (window as any).analysisData?.value || {};
   const timeRange = (window as any).timeRange?.value || '7d';
   let xAxisData: string[] = [];

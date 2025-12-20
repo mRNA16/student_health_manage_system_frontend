@@ -166,8 +166,8 @@ export const fetchComments = async (
     content: string;
     created_at: string;
     id: number;
-    user: number; // 这里返回的其实是UserId
-    username: string;
+    user_id: number; // 这里返回的其实是UserId
+    user_name: string;
   }[]
 > => {
   return requestClient.get('/comments/', {

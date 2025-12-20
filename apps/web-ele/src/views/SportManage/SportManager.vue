@@ -11,6 +11,7 @@ import {
   deleteRecord,
   getCurrentUser,
   getRecordList,
+  getSportAnalysis,
   getSportList,
   updateRecord,
 } from '../../api/sport';
@@ -25,6 +26,7 @@ export default defineComponent({
     const dialogVisible = ref(false);
     const user = ref<any>(null);
     const caloriesPreview = ref(0);
+    const analysisData = ref<any>(null);
 
     const continuousLowActivityDays = ref(0); // 连续低运动量天数
     const showActivityWarning = ref(false); // 是否显示运动警告
@@ -72,61 +74,43 @@ export default defineComponent({
       const res = await getRecordList();
       recordList.value = res || [];
 
+      await fetchAnalysis();
       renderWeekCaloriesChart();
       renderDailyPieChart();
-      checkContinuousLowActivity();
     };
 
-    const checkContinuousLowActivity = () => {
-      // 按日期分组计算每天的总卡路里消耗
-      const dailyCalories: Record<string, number> = {};
-
-      // 为recordList添加明确的类型断言
-      const records = recordList.value as Array<{
-        calories: number;
-        date: string;
-      }>;
-
-      records.forEach((record) => {
-        const date = record.date;
-        if (typeof date !== 'string') return;
-        dailyCalories[date] =
-          (dailyCalories[date] ?? 0) + (record.calories || 0);
-      });
-
-      // 获取最近14天的日期列表
-      const recentDates = Array.from({ length: 14 }, (_, i) =>
-        dayjs().subtract(i, 'day').format('YYYY-MM-DD'),
-      ).reverse();
-
-      // 检查连续低运动量天数
-      let currentStreak = 0;
-      let maxStreak = 0;
-
-      recentDates.forEach((date) => {
-        const calories = dailyCalories[date] || 0;
-        if (calories < LOW_ACTIVITY_THRESHOLD) {
-          currentStreak++;
-          maxStreak = Math.max(maxStreak, currentStreak);
+    const fetchAnalysis = async () => {
+      try {
+        const today = dayjs();
+        let start;
+        if (timeRange.value === '7d') {
+          start = today.subtract(6, 'day').format('YYYY-MM-DD');
+        } else if (timeRange.value === '30d') {
+          start = today.subtract(29, 'day').format('YYYY-MM-DD');
         } else {
-          currentStreak = 0;
+          start = today.subtract(1, 'year').format('YYYY-MM-DD');
         }
-      });
-
-      continuousLowActivityDays.value = maxStreak;
-
-      // 如果达到预警阈值，显示警告
-      if (maxStreak >= CONTINUOUS_DAYS_THRESHOLD) {
-        showActivityWarning.value = true;
-        // 显示警告消息
-        ElMessage({
-          message: `⚠️ 运动警告：您已连续${maxStreak}天运动量过低（少于${LOW_ACTIVITY_THRESHOLD}千卡）！`,
-          type: 'warning',
-          duration: 5000, // 5秒后自动关闭
-          showClose: true, // 允许手动关闭
+        const res = await getSportAnalysis({
+          start_date: start,
+          end_date: today.format('YYYY-MM-DD'),
         });
-      } else {
-        showActivityWarning.value = false;
+        analysisData.value = res;
+        continuousLowActivityDays.value = res.continuousLowActivityDays || 0;
+
+        // 如果达到预警阈值，显示警告
+        if (continuousLowActivityDays.value >= CONTINUOUS_DAYS_THRESHOLD) {
+          showActivityWarning.value = true;
+          ElMessage({
+            message: `⚠️ 运动警告：您已连续${continuousLowActivityDays.value}天运动量过低（少于${LOW_ACTIVITY_THRESHOLD}千卡）！`,
+            type: 'warning',
+            duration: 5000,
+            showClose: true,
+          });
+        } else {
+          showActivityWarning.value = false;
+        }
+      } catch (error) {
+        console.error('Failed to fetch analysis:', error);
       }
     };
 
@@ -222,6 +206,24 @@ export default defineComponent({
     );
 
     const getCaloriesData = () => {
+      if (analysisData.value) {
+        const data =
+          timeRange.value === '1y'
+            ? analysisData.value.yearlyData
+            : analysisData.value.dailyData;
+        if (data && data.length > 0) {
+          const labels = data.map((item: any) =>
+            timeRange.value === '1y'
+              ? item.date
+              : dayjs(item.date).format('MM-DD'),
+          );
+          const caloriesData = data.map(
+            (item: any) => item.totalCalories || item.calories || 0,
+          );
+          return { labels, caloriesData };
+        }
+      }
+
       const range = timeRange.value;
       let labels: string[] = []; // x轴标签
       let groupKey: (date: string) => string;
@@ -370,8 +372,9 @@ export default defineComponent({
       });
     };
 
-    const handleTimeRangeChange = (value: '1y' | '7d' | '30d') => {
+    const handleTimeRangeChange = async (value: '1y' | '7d' | '30d') => {
       timeRange.value = value;
+      await fetchAnalysis();
       // 范围变化时重新渲染折线图
       renderWeekCaloriesChart();
     };
@@ -499,6 +502,73 @@ export default defineComponent({
       ];
     });
 
+    const activityAnalysis = computed(() => {
+      if (!analysisData.value) return null;
+
+      const avgDailyCalories = Number(analysisData.value.avgDailyCalories || 0);
+      const avgDailyDuration = Number(analysisData.value.avgDailyDuration || 0);
+      const continuousDays = Number(
+        analysisData.value.continuousLowActivityDays || 0,
+      );
+
+      const activityIssues: string[] = [];
+      if (avgDailyDuration < 30) {
+        activityIssues.push('平均每日运动时长不足（建议≥30分钟）');
+      }
+      if (avgDailyCalories < 300) {
+        activityIssues.push('平均每日消耗热量偏低（建议≥300千卡）');
+      }
+      if (continuousDays >= CONTINUOUS_DAYS_THRESHOLD) {
+        activityIssues.push(`连续${continuousDays}天运动量偏低`);
+      }
+
+      const coreAdvice = [
+        '1. 每天坚持30分钟中等强度运动。',
+        '2. 多样化运动类型，避免单一。',
+        '3. 运动前做好热身，运动后拉伸。',
+      ];
+
+      const specificAdvice: string[] = [];
+      if (avgDailyDuration < 30) {
+        specificAdvice.push('• 增加每日运动时长，逐步达到30分钟。');
+      }
+      if (avgDailyCalories < 300) {
+        specificAdvice.push('• 提高运动强度或延长运动时间。');
+      }
+      if (continuousDays >= CONTINUOUS_DAYS_THRESHOLD) {
+        specificAdvice.push(
+          `• 避免连续${CONTINUOUS_DAYS_THRESHOLD}天运动量过低，适当安排锻炼。`,
+        );
+      }
+      if (specificAdvice.length === 0) {
+        specificAdvice.push('• 保持良好运动习惯，继续加油！');
+      }
+
+      const allTips = [
+        '• 运动时保持补水，避免脱水。',
+        '• 选择适合自己的运动项目。',
+        '• 运动后适当补充蛋白质。',
+        '• 合理安排运动与休息，避免过度训练。',
+        '• 运动时注意安全，量力而行。',
+      ];
+      const activityTips = [...allTips]
+        .sort(() => 0.5 - Math.random())
+        .slice(0, 3);
+
+      return {
+        avgDailyCalories,
+        avgDailyDuration,
+        frequencyScore: analysisData.value.frequencyScore || 0,
+        durationScore: analysisData.value.durationScore || 0,
+        calorieScore: analysisData.value.calorieScore || 0,
+        sportScore: analysisData.value.sportScore || 0,
+        activityIssues,
+        coreAdvice,
+        specificAdvice,
+        activityTips,
+      };
+    });
+
     onMounted(async () => {
       await fetchUser();
       await fetchSportList();
@@ -530,7 +600,9 @@ export default defineComponent({
       showActivityWarning,
       LOW_ACTIVITY_THRESHOLD,
       MONTHLY_LOW_ACTIVITY_THRESHOLD,
+      CONTINUOUS_DAYS_THRESHOLD,
       generateActivityAdvice,
+      activityAnalysis,
     };
   },
 });
@@ -582,7 +654,7 @@ export default defineComponent({
             {{ sportList[scope.row.sport] || '未知' }}
           </template>
         </el-table-column>
-        <el-table-column prop="duration" label="时长(小时)" width="120" />
+        <el-table-column prop="duration" label="时长(分钟)" width="120" />
         <el-table-column prop="calories" label="消耗卡路里(kCal)" width="120" />
         <el-table-column label="操作" width="180">
           <template #default="scope">
@@ -680,6 +752,161 @@ export default defineComponent({
       </div>
     </el-card>
 
+    <el-card class="mt-4" v-if="activityAnalysis">
+      <template #header>
+        <span style="font-weight: bold">运动健康分析与建议</span>
+      </template>
+      <!-- 运动指标概览 -->
+      <div class="metrics-container">
+        <div class="metric-item">
+          <div class="metric-label">平均每日热量消耗</div>
+          <div class="metric-value">
+            {{ activityAnalysis.avgDailyCalories.toFixed(1) }} kcal
+          </div>
+          <div
+            class="metric-status"
+            :class="
+              activityAnalysis.avgDailyCalories >= 300 ? 'good' : 'warning'
+            "
+          >
+            {{ activityAnalysis.avgDailyCalories >= 300 ? '正常' : '偏低' }}
+          </div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-label">平均每日运动时长</div>
+          <div class="metric-value">
+            {{ activityAnalysis.avgDailyDuration.toFixed(1) }} 分钟
+          </div>
+          <div
+            class="metric-status"
+            :class="
+              activityAnalysis.avgDailyDuration >= 30 ? 'good' : 'warning'
+            "
+          >
+            {{ activityAnalysis.avgDailyDuration >= 30 ? '达标' : '不足' }}
+          </div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-label">连续低运动量</div>
+          <div class="metric-value">{{ continuousLowActivityDays }} 天</div>
+          <div
+            class="metric-status"
+            :class="
+              continuousLowActivityDays < CONTINUOUS_DAYS_THRESHOLD
+                ? 'good'
+                : 'danger'
+            "
+          >
+            {{
+              continuousLowActivityDays < CONTINUOUS_DAYS_THRESHOLD
+                ? '正常'
+                : '需警惕'
+            }}
+          </div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-label">运动综合评分</div>
+          <div class="metric-value">{{ activityAnalysis.sportScore }}</div>
+          <div
+            class="metric-status"
+            :class="activityAnalysis.sportScore >= 60 ? 'good' : 'warning'"
+          >
+            {{
+              activityAnalysis.sportScore >= 80
+                ? '优秀'
+                : activityAnalysis.sportScore >= 60
+                  ? '良好'
+                  : '需改进'
+            }}
+          </div>
+        </div>
+      </div>
+
+      <!-- 评分详情 -->
+      <div
+        class="metrics-container mt-3"
+        style="padding-bottom: 0; border-bottom: none"
+      >
+        <div
+          class="metric-item"
+          style="background-color: transparent; border: 1px solid #eee"
+        >
+          <div class="metric-label">频率得分</div>
+          <el-progress
+            type="dashboard"
+            :percentage="activityAnalysis.frequencyScore"
+            :width="80"
+          />
+        </div>
+        <div
+          class="metric-item"
+          style="background-color: transparent; border: 1px solid #eee"
+        >
+          <div class="metric-label">时长得分</div>
+          <el-progress
+            type="dashboard"
+            :percentage="activityAnalysis.durationScore"
+            :width="80"
+          />
+        </div>
+        <div
+          class="metric-item"
+          style="background-color: transparent; border: 1px solid #eee"
+        >
+          <div class="metric-label">热量得分</div>
+          <el-progress
+            type="dashboard"
+            :percentage="activityAnalysis.calorieScore"
+            :width="80"
+          />
+        </div>
+      </div>
+
+      <!-- 运动问题标签 -->
+      <div class="issues-container mt-4">
+        <div class="section-title">检测到的运动问题</div>
+        <div
+          v-if="
+            !activityAnalysis.activityIssues ||
+            activityAnalysis.activityIssues.length === 0
+          "
+          class="no-issues"
+        >
+          未检测到明显运动问题，继续保持！
+        </div>
+        <el-tag
+          v-for="(issue, i) in activityAnalysis.activityIssues"
+          :key="i"
+          type="warning"
+          class="issue-tag"
+        >
+          {{ issue }}
+        </el-tag>
+      </div>
+
+      <!-- 运动建议 -->
+      <div class="advice-container mt-4">
+        <div class="section-title">核心改善建议</div>
+        <ul class="advice-list core-advice">
+          <li v-for="(item, i) in activityAnalysis.coreAdvice" :key="i">
+            {{ item }}
+          </li>
+        </ul>
+        <div class="section-title mt-3">针对性建议</div>
+        <ul class="advice-list targeted-advice">
+          <li v-for="(item, i) in activityAnalysis.specificAdvice" :key="i">
+            {{ item }}
+          </li>
+        </ul>
+        <div class="section-title mt-3">运动小贴士</div>
+        <ul class="advice-list tips-advice">
+          <li v-for="(item, i) in activityAnalysis.activityTips" :key="i">
+            {{ item }}
+          </li>
+        </ul>
+      </div>
+    </el-card>
+
     <el-dialog v-model="dialogVisible" title="运动记录">
       <el-form :model="form">
         <el-form-item label="日期">
@@ -751,5 +978,118 @@ export default defineComponent({
 
 ::v-deep .el-select {
   width: 160px;
+}
+
+.metrics-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-bottom: 16px;
+  margin-top: 16px;
+  border-bottom: 1px dashed #eee;
+}
+
+.metric-item {
+  flex: 1;
+  min-width: 150px;
+  padding: 12px;
+  text-align: center;
+  background-color: #f9f9f9;
+  border-radius: 6px;
+}
+
+.metric-label {
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: #666;
+}
+
+.metric-value {
+  margin-bottom: 4px;
+  font-size: 18px;
+  font-weight: bold;
+  color: #333;
+}
+
+.metric-status {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 12px;
+  border-radius: 12px;
+}
+
+.metric-status.good {
+  color: #52c41a;
+  background-color: #e1f3d8;
+}
+
+.metric-status.warning {
+  color: #fa541c;
+  background-color: #fff2e8;
+}
+
+.metric-status.danger {
+  color: #f5222d;
+  background-color: #fff1f0;
+}
+
+.issues-container {
+  padding-bottom: 16px;
+  margin-top: 16px;
+  border-bottom: 1px dashed #eee;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+}
+
+.section-title::before {
+  display: inline-block;
+  width: 4px;
+  height: 14px;
+  margin-right: 6px;
+  content: '';
+  background-color: #409eff;
+  border-radius: 2px;
+}
+
+.no-issues {
+  padding: 8px 0;
+  color: #666;
+}
+
+.issue-tag {
+  margin: 4px 4px 4px 0;
+}
+
+.advice-container {
+  margin-top: 16px;
+}
+
+.advice-list {
+  padding-left: 20px;
+  margin-top: 8px;
+}
+
+.advice-list li {
+  margin-bottom: 4px;
+  line-height: 1.6;
+  color: #666;
+}
+
+.core-advice li {
+  color: #389e0d;
+}
+
+.targeted-advice li {
+  color: #1890ff;
+}
+
+.tips-advice li {
+  color: #fa8c16;
 }
 </style>
