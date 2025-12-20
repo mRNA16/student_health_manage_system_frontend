@@ -63,12 +63,19 @@ const getFriendDetail = async () => {
       response.activities && response.activities.length > 0
         ? response.activities[0]!.timestamp
         : undefined;
-    activities.value = response.activities ? [...response.activities] : [];
-    for (const activity of activities.value) {
-      activity.comments = [];
-      activity.newComment = '';
-      await loadComments(activity);
-    }
+    
+    const rawActivities = response.activities ? [...response.activities] : [];
+    
+    // 并行加载所有活动的评论
+    await Promise.all(
+      rawActivities.map(async (activity: any) => {
+        activity.comments = [];
+        activity.newComment = '';
+        await loadComments(activity);
+      })
+    );
+    
+    activities.value = rawActivities;
   } catch (error) {
     ElMessage.error('获取好友详情失败');
     console.error('Failed to fetch friend detail:', error);

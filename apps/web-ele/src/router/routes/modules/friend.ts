@@ -11,27 +11,18 @@ const routes: RouteRecordRaw[] = [
     },
     name: 'FriendManager',
     path: '/friend',
-    children: [
-      {
-        name: 'FriendManagerIndex',
-        path: '',
-        component: () => import('#/views/FriendManage/FriendManager.vue'),
-        meta: {
-          icon: 'mdi:account-multiple',
-          title: $t('friend.title'),
-        },
-      },
-      {
-        name: 'FriendDetail',
-        path: 'detail/:id',
-        component: () => import('#/views/FriendManage/FriendDetail.vue'),
-        meta: {
-          icon: 'mdi:account-circle',
-          title: $t('friend.detail'),
-          hideInMenu: true,
-        },
-      },
-    ],
+    component: () => import('#/views/FriendManage/FriendManager.vue'),
+  },
+  {
+    name: 'FriendDetail',
+    path: '/friend/detail/:id',
+    component: () => import('#/views/FriendManage/FriendDetail.vue'),
+    meta: {
+      title: $t('friend.detail'),
+      icon: 'mdi:account-multiple',
+      hideInMenu: true,
+      activeMenu: '/friend',
+    },
   },
 ];
 

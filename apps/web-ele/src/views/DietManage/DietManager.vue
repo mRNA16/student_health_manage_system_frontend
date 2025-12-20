@@ -67,10 +67,17 @@ watch(timeRange, fetchDietAnalysis);
 
 /* 初始化 */
 onMounted(async () => {
-  user.value = await getCurrentUser();
-  foodList.value = await getFoodList();
-  await fetchRecords();
-  await fetchDietAnalysis();
+  // 并行加载基础数据
+  const [userData, foodData] = await Promise.all([
+    getCurrentUser(),
+    getFoodList(),
+  ]);
+  user.value = userData;
+  foodList.value = foodData;
+
+  // 并行加载业务数据
+  await Promise.all([fetchRecords(), fetchDietAnalysis()]);
+
   watch(selectedPieDate, () => {}, { immediate: true });
 });
 

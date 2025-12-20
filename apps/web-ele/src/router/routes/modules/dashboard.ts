@@ -11,17 +11,7 @@ const routes: RouteRecordRaw[] = [
     },
     name: 'Dashboard',
     path: '/dashboard',
-    children: [
-      {
-        name: 'Workspace',
-        path: '/workspace',
-        component: () => import('#/views/dashboard/workspace/index.vue'),
-        meta: {
-          icon: 'carbon:workspace',
-          title: $t('page.dashboard.workspace'),
-        },
-      },
-    ],
+    component: () => import('#/views/dashboard/workspace/index.vue'),
   },
 ];
 

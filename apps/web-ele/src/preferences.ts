@@ -10,5 +10,6 @@ export const overridesPreferences = defineOverridesPreferences({
   app: {
     enableRefreshToken: true,
     loginExpiredMode: 'modal',
+    defaultHomePath: '/dashboard',
   },
 });

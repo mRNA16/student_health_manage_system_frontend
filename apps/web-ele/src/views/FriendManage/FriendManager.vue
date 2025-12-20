@@ -30,11 +30,23 @@ const newFriendUsername = ref('');
 const currentUserId = ref<null | number>(null);
 
 onMounted(async () => {
-  const res = await getCurrentUserInfo();
-  currentUserId.value = res.id;
-  fetchFriendsList();
-  fetchSentRequests();
-  fetchReceivedRequests();
+  try {
+    // 并行加载所有基础数据
+    const [userRes, friendsRes, sentRes, receivedRes] = await Promise.all([
+      getCurrentUserInfo(),
+      getFriendList(),
+      getFriendRequests('sent'),
+      getFriendRequests('received'),
+    ]);
+
+    currentUserId.value = userRes.id;
+    friendsList.value = friendsRes;
+    sentRequests.value = sentRes;
+    receivedRequests.value = receivedRes;
+  } catch (error) {
+    ElMessage.error('获取好友数据失败');
+    console.error('Failed to fetch friend data:', error);
+  }
 });
 
 // 方法

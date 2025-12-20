@@ -35,8 +35,32 @@ export function deleteRecord(id: number) {
   return requestClient.delete(`/sport/records/${id}/`);
 }
 
-export function getSportList() {
-  return requestClient.get('/sport/list/');
+let sportListCache: any = null;
+
+export async function getSportList() {
+  if (sportListCache) {
+    return sportListCache;
+  }
+
+  // 尝试从 localStorage 获取
+  const cached = localStorage.getItem('sport_list_cache');
+  if (cached) {
+    try {
+      sportListCache = JSON.parse(cached);
+      return sportListCache;
+    } catch (e) {
+      console.error('Failed to parse sport list cache', e);
+    }
+  }
+
+  const res = await requestClient.get('/sport/list/');
+  sportListCache = res;
+  try {
+    localStorage.setItem('sport_list_cache', JSON.stringify(res));
+  } catch (e) {
+    console.warn('Failed to save sport list to localStorage', e);
+  }
+  return res;
 }
 
 export function getSportAnalysis(params: {

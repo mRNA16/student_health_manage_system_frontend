@@ -197,21 +197,23 @@ const generateAdvice = (data: any) => {
 // 获取分析数据和全部记录
 const fetchAll = async () => {
   try {
-    // 用户信息
-    user.value = await getCurrentUser();
-    // 全部记录用于表格
-    const allRes = await getSleepRecords({
-      start_date: '1970-01-01',
-      end_date: dayjs().format('YYYY-MM-DD'),
-    });
+    const { start, end } = getTimeRangeDates();
+
+    // 并行加载所有数据
+    const [userData, allRes, analysisRes] = await Promise.all([
+      getCurrentUser(),
+      getSleepRecords({
+        start_date: '1970-01-01',
+        end_date: dayjs().format('YYYY-MM-DD'),
+      }),
+      getSleepAnalysis({ start_date: start, end_date: end }),
+    ]);
+
+    user.value = userData;
     allRecords.value = allRes || [];
 
-    // 获取后端分析数据
-    const { start, end } = getTimeRangeDates();
-    const res = await getSleepAnalysis({ start_date: start, end_date: end });
-
     // 在前端生成建议
-    analysisData.value = generateAdvice(res);
+    analysisData.value = generateAdvice(analysisRes);
   } catch {
     ElMessage.error('获取数据失败');
   }

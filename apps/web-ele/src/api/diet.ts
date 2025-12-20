@@ -42,9 +42,33 @@ export function deleteMealRecord(id: number) {
   return requestClient.delete(`/diet/records/${id}/`);
 }
 
+let foodListCache: any = null;
+
 // 获取常见食物列表
-export function getFoodList() {
-  return requestClient.get('/diet/list');
+export async function getFoodList() {
+  if (foodListCache) {
+    return foodListCache;
+  }
+
+  // 尝试从 localStorage 获取
+  const cached = localStorage.getItem('food_list_cache');
+  if (cached) {
+    try {
+      foodListCache = JSON.parse(cached);
+      return foodListCache;
+    } catch (e) {
+      console.error('Failed to parse food list cache', e);
+    }
+  }
+
+  const res = await requestClient.get('/diet/list');
+  foodListCache = res;
+  try {
+    localStorage.setItem('food_list_cache', JSON.stringify(res));
+  } catch (e) {
+    console.warn('Failed to save food list to localStorage', e);
+  }
+  return res;
 }
 
 export function getDietAnalysis(params: {

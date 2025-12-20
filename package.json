@@ -56,6 +56,7 @@
   "devDependencies": {
     "@changesets/changelog-github": "catalog:",
     "@changesets/cli": "catalog:",
+    "@element-plus/icons-vue": "^2.3.2",
     "@playwright/test": "catalog:",
     "@types/node": "catalog:",
     "@vben/commitlint-config": "workspace:*",
@@ -73,6 +74,7 @@
     "autoprefixer": "catalog:",
     "cross-env": "catalog:",
     "cspell": "catalog:",
+    "cssnano": "catalog:",
     "happy-dom": "catalog:",
     "is-ci": "catalog:",
     "lefthook": "catalog:",
@@ -85,9 +87,8 @@
     "vite": "catalog:",
     "vitest": "catalog:",
     "vue": "catalog:",
-    "vue-tsc": "catalog:",
     "vue-charts": "^0.2.1",
-    "@element-plus/icons-vue": "^2.3.2"
+    "vue-tsc": "catalog:"
   },
   "engines": {
     "node": ">=20.10.0",

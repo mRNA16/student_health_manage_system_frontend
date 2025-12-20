@@ -44,31 +44,12 @@ export default defineComponent({
     const CONTINUOUS_DAYS_THRESHOLD = 3; // 连续天数阈值
     const form = ref({
       id: 0,
-      date: '',
+      date: dayjs().format('YYYY-MM-DD'),
       sport: 0,
       begin_time: new Date(),
       end_time: new Date(),
       calories: 0,
     });
-    const fetchUser = async () => {
-      try {
-        // 获取当前用户信息
-        const userRes = await getCurrentUser();
-        user.value = userRes;
-      } catch {
-        ElMessage.error('获取数据失败');
-      }
-    };
-
-    const fetchSportList = async () => {
-      const res = await getSportList();
-      sportList.value = Array.isArray(res)
-        ? res.filter((item) => 'name' in item).map((item) => item.name)
-        : [];
-      metList.value = Array.isArray(res)
-        ? res.filter((item) => 'met' in item).map((item) => item.met)
-        : [];
-    };
 
     const fetchRecordList = async () => {
       const res = await getRecordList();
@@ -117,14 +98,13 @@ export default defineComponent({
     const openAddDialog = () => {
       form.value = {
         id: 0,
-        date: '',
+        date: dayjs().format('YYYY-MM-DD'),
         sport: 0,
         begin_time: new Date(1970, 0, 1, 0, 0, 0),
         end_time: new Date(1970, 0, 1, 0, 0, 0),
         calories: 0,
       };
       dialogVisible.value = true;
-      fetchSportList();
     };
 
     const editRecord = (row: {
@@ -570,11 +550,22 @@ export default defineComponent({
     });
 
     onMounted(async () => {
-      await fetchUser();
-      await fetchSportList();
+      // 并行加载基础数据
+      const [userRes, sportRes] = await Promise.all([
+        getCurrentUser(),
+        getSportList(),
+      ]);
+      user.value = userRes;
+      sportList.value = Array.isArray(sportRes)
+        ? sportRes.filter((item) => 'name' in item).map((item) => item.name)
+        : [];
+      metList.value = Array.isArray(sportRes)
+        ? sportRes.filter((item) => 'met' in item).map((item) => item.met)
+        : [];
+
+      // 加载记录列表（内部会调用 fetchAnalysis 并渲染图表）
       await fetchRecordList();
-      renderWeekCaloriesChart();
-      renderDailyPieChart();
+
       watch(selectedDate, handleDateChange, { immediate: true });
     });
 

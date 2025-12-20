@@ -107,27 +107,29 @@ const fetchAllData = async () => {
   try {
     const { start, end } = getTimeRangeDates();
 
-    // 获取睡眠数据
-    const sleepRes = await getSleepRecords({
-      start_date: start,
-      end_date: end,
-    });
+    // 并行获取所有数据
+    const [sleepRes, sportRes, dietRes] = await Promise.all([
+      getSleepRecords({
+        start_date: start,
+        end_date: end,
+      }),
+      getRecordList(),
+      getMealRecords(),
+    ]);
+
+    // 处理睡眠数据
     sleepRecords.value = (sleepRes || []).map((record: any) => ({
       ...record,
       duration: calculateSleepDuration(record.sleep_time, record.wake_time),
     }));
 
-    // 获取运动数据
-    const sportRes = await getRecordList();
+    // 处理运动数据（过滤时间范围内的数据）
     sportRecords.value = (sportRes || []).filter((record: any) => {
-      // 过滤时间范围内的数据
       return dayjs(record.date).isBetween(start, end, null, '[]');
     });
 
-    // 获取饮食数据
-    const dietRes = await getMealRecords();
+    // 处理饮食数据（过滤时间范围内的数据）
     dietRecords.value = (dietRes || []).filter((record: any) => {
-      // 过滤时间范围内的数据
       return dayjs(record.date).isBetween(start, end, null, '[]');
     });
 

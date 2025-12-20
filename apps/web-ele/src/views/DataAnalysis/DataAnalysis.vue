@@ -50,8 +50,8 @@ const trendChart = ref<HTMLElement>();
 
 // 生命周期
 onMounted(async () => {
-  await loadHealthSummary();
-  await loadAnalysisHistory();
+  // 并行加载数据
+  await Promise.all([loadHealthSummary(), loadAnalysisHistory()]);
 });
 
 // 切换自动清除分析结果

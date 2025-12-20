@@ -1,17 +1,16 @@
 <script lang="ts" setup>
 import type {
-  WorkbenchProjectItem,
   WorkbenchQuickNavItem,
-  WorkbenchTodoItem,
   WorkbenchTrendItem,
 } from '@vben/common-ui';
 
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
+import { ElMessage } from 'element-plus';
+
 import {
   WorkbenchHeader,
-  WorkbenchProject,
   WorkbenchQuickNav,
   WorkbenchTodo,
   WorkbenchTrends,
@@ -26,6 +25,7 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 import { getMealRecords } from '../../../api/diet';
 import { getSleepRecords } from '../../../api/sleep';
 import { getRecordList } from '../../../api/sport';
+import { getCurrentUserProfile, updateCurrentUserProfile } from '../../../api/user';
 
 dayjs.extend(relativeTime);
 
@@ -61,62 +61,108 @@ const userStore = useUserStore();
 // 这是一个示例数据，实际项目中需要根据实际情况进行调整
 // url 也可以是内部路由，在 navTo 方法中识别处理，进行内部跳转
 // 例如：url: /dashboard/workspace
-const projectItems: WorkbenchProjectItem[] = [
+const healthTips = ref([
   {
-    color: '',
-    content: '不要等待机会，而要创造机会。',
-    date: '2021-04-01',
-    group: '开源组',
-    icon: 'carbon:logo-github',
-    title: 'Github',
-    url: 'https://github.com',
+    completed: false,
+    content: '每天坚持运动30分钟，可以显著提高心肺功能。',
+    date: dayjs().format('YYYY-MM-DD'),
+    title: '坚持运动',
   },
   {
-    color: '#3fb27f',
-    content: '现在的你决定将来的你。',
-    date: '2021-04-01',
-    group: '算法组',
-    icon: 'ion:logo-vue',
-    title: 'Vue',
-    url: 'https://vuejs.org',
+    completed: false,
+    content: '保证每天7-8小时的睡眠，有助于身体恢复和精神集中。',
+    date: dayjs().format('YYYY-MM-DD'),
+    title: '充足睡眠',
   },
   {
-    color: '#e18525',
-    content: '没有什么才能比努力更重要。',
-    date: '2021-04-01',
-    group: '上班摸鱼',
-    icon: 'ion:logo-html5',
-    title: 'Html5',
-    url: 'https://developer.mozilla.org/zh-CN/docs/Web/HTML',
+    completed: false,
+    content: '多吃蔬菜水果，减少高糖高油食物的摄入。',
+    date: dayjs().format('YYYY-MM-DD'),
+    title: '均衡饮食',
   },
   {
-    color: '#bf0c2c',
-    content: '热情和欲望可以突破一切难关。',
-    date: '2021-04-01',
-    group: 'UI',
-    icon: 'ion:logo-angular',
-    title: 'Angular',
-    url: 'https://angular.io',
+    completed: false,
+    content: '每小时起身活动5分钟，缓解久坐带来的身体压力。',
+    date: dayjs().format('YYYY-MM-DD'),
+    title: '避免久坐',
   },
-  {
-    color: '#00d8ff',
-    content: '健康的身体是实现目标的基石。',
-    date: '2021-04-01',
-    group: '技术牛',
-    icon: 'bx:bxl-react',
-    title: 'React',
-    url: 'https://reactjs.org',
-  },
-  {
-    color: '#EBD94E',
-    content: '路是走出来的，而不是空想出来的。',
-    date: '2021-04-01',
-    group: '架构组',
-    icon: 'ion:logo-javascript',
-    title: 'Js',
-    url: 'https://developer.mozilla.org/zh-CN/docs/Web/JavaScript',
-  },
-];
+]);
+
+const healthGoals = ref({
+  daily_calories_burn_goal: 300,
+  daily_calories_intake_goal: 2000,
+  daily_sleep_hours_goal: 8,
+});
+
+const todayStats = ref({
+  calories_burned: 0,
+  calories_intake: 0,
+  sleep_hours: 0,
+});
+
+const editGoalsDialogVisible = ref(false);
+const goalsForm = ref({ ...healthGoals.value });
+
+const fetchHealthData = async () => {
+  try {
+    const today = dayjs().format('YYYY-MM-DD');
+    const [userProfile, sleepRes, dietRes, sportRes] = await Promise.all([
+      getCurrentUserProfile(),
+      getSleepRecords({ start_date: today, end_date: today }),
+      getMealRecords(),
+      getRecordList(),
+    ]);
+
+    // 更新目标
+    if (userProfile) {
+      healthGoals.value = {
+        daily_calories_burn_goal: userProfile.daily_calories_burn_goal || 300,
+        daily_calories_intake_goal: userProfile.daily_calories_intake_goal || 2000,
+        daily_sleep_hours_goal: userProfile.daily_sleep_hours_goal || 8,
+      };
+      goalsForm.value = { ...healthGoals.value };
+    }
+
+    // 计算今日统计
+    let todaySleep = 0;
+    if (sleepRes && sleepRes.length > 0) {
+      todaySleep = sleepRes.reduce((sum: number, r: any) => sum + (r.duration || 0), 0);
+    }
+
+    let todayIntake = 0;
+    if (dietRes && dietRes.length > 0) {
+      todayIntake = (dietRes as any[])
+        .filter(r => r.date === today)
+        .reduce((sum, r) => sum + r.items.reduce((s: number, i: any) => s + i.estimated_calories, 0), 0);
+    }
+
+    let todayBurned = 0;
+    if (sportRes && sportRes.length > 0) {
+      todayBurned = (sportRes as any[])
+        .filter(r => r.date === today)
+        .reduce((sum, r) => sum + (r.calories || r.calories_burned || 0), 0);
+    }
+
+    todayStats.value = {
+      calories_burned: todayBurned,
+      calories_intake: todayIntake,
+      sleep_hours: todaySleep,
+    };
+  } catch (error) {
+    console.error('获取健康数据失败:', error);
+  }
+};
+
+const handleUpdateGoals = async () => {
+  try {
+    await updateCurrentUserProfile(goalsForm.value);
+    healthGoals.value = { ...goalsForm.value };
+    editGoalsDialogVisible.value = false;
+    ElMessage.success('目标更新成功');
+  } catch (error) {
+    ElMessage.error('更新失败');
+  }
+};
 
 // 同样，这里的 url 也可以使用以 http 开头的外部链接
 const quickNavItems: WorkbenchQuickNavItem[] = [
@@ -222,38 +268,6 @@ const fetchUserActivities = async () => {
   }
 };
 
-const todoItems = ref<WorkbenchTodoItem[]>([
-  {
-    completed: false,
-    content: `审查最近提交到Git仓库的前端代码，确保代码质量和规范。`,
-    date: '2024-07-30 11:00:00',
-    title: '审查前端代码提交',
-  },
-  {
-    completed: true,
-    content: `检查并优化系统性能，降低CPU使用率。`,
-    date: '2024-07-30 11:00:00',
-    title: '系统性能优化',
-  },
-  {
-    completed: false,
-    content: `进行系统安全检查，确保没有安全漏洞或未授权的访问。 `,
-    date: '2024-07-30 11:00:00',
-    title: '安全检查',
-  },
-  {
-    completed: false,
-    content: `更新项目中的所有npm依赖包，确保使用最新版本。`,
-    date: '2024-07-30 11:00:00',
-    title: '更新项目依赖',
-  },
-  {
-    completed: false,
-    content: `修复用户报告的页面UI显示问题，确保在不同浏览器中显示一致。 `,
-    date: '2024-07-30 11:00:00',
-    title: '修复UI显示问题',
-  },
-]);
 
 const trendItems = ref<WorkbenchTrendItem[]>([]);
 
@@ -261,7 +275,7 @@ const router = useRouter();
 
 // 这是一个示例方法，实际项目中需要根据实际情况进行调整
 // This is a sample method, adjust according to the actual project requirements
-function navTo(nav: WorkbenchProjectItem | WorkbenchQuickNavItem) {
+function navTo(nav: WorkbenchQuickNavItem) {
   if (nav.url?.startsWith('http')) {
     openWindow(nav.url);
     return;
@@ -277,6 +291,7 @@ function navTo(nav: WorkbenchProjectItem | WorkbenchQuickNavItem) {
 
 onMounted(() => {
   fetchUserActivities();
+  fetchHealthData();
 });
 </script>
 
@@ -286,17 +301,52 @@ onMounted(() => {
       :avatar="userStore.userInfo?.avatar || preferences.app.defaultAvatar"
     >
       <template #title>
-        早安, {{ userStore.userInfo?.realName }}, 开始您一天的工作吧！
+        您好, {{ userStore.userInfo?.realName }}，一起来记录健康生活吧！
       </template>
-      <template #description> 今日晴，20℃ - 32℃！ </template>
+      <template #description>Smart Vital-您的健康生活助手</template>
     </WorkbenchHeader>
 
     <div class="mt-5 flex flex-col lg:flex-row">
       <div class="mr-4 w-full lg:w-3/5">
-        <WorkbenchProject :items="projectItems" title="项目" @click="navTo" />
+        <el-card class="mb-5">
+          <template #header>
+            <div class="flex items-center justify-between">
+              <span class="font-bold">今日健康目标</span>
+              <el-button type="primary" link @click="editGoalsDialogVisible = true">修改目标</el-button>
+            </div>
+          </template>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6 py-4">
+            <div class="flex flex-col items-center">
+              <span class="text-gray-500 mb-2">睡眠时长</span>
+              <el-progress 
+                type="dashboard" 
+                :percentage="Math.min(100, Math.round((todayStats.sleep_hours / healthGoals.daily_sleep_hours_goal) * 100))"
+                :color="todayStats.sleep_hours >= healthGoals.daily_sleep_hours_goal ? '#67C23A' : '#409EFF'"
+              />
+              <span class="mt-2 text-sm">{{ todayStats.sleep_hours.toFixed(1) }} / {{ healthGoals.daily_sleep_hours_goal }} 小时</span>
+            </div>
+            <div class="flex flex-col items-center">
+              <span class="text-gray-500 mb-2">卡路里摄入</span>
+              <el-progress 
+                type="dashboard" 
+                :percentage="Math.min(100, Math.round((todayStats.calories_intake / healthGoals.daily_calories_intake_goal) * 100))"
+                :color="todayStats.calories_intake > healthGoals.daily_calories_intake_goal ? '#F56C6C' : '#E6A23C'"
+              />
+              <span class="mt-2 text-sm">{{ todayStats.calories_intake.toFixed(0) }} / {{ healthGoals.daily_calories_intake_goal }} kcal</span>
+            </div>
+            <div class="flex flex-col items-center">
+              <span class="text-gray-500 mb-2">卡路里消耗</span>
+              <el-progress 
+                type="dashboard" 
+                :percentage="Math.min(100, Math.round((todayStats.calories_burned / healthGoals.daily_calories_burn_goal) * 100))"
+                :color="todayStats.calories_burned >= healthGoals.daily_calories_burn_goal ? '#67C23A' : '#F56C6C'"
+              />
+              <span class="mt-2 text-sm">{{ todayStats.calories_burned.toFixed(0) }} / {{ healthGoals.daily_calories_burn_goal }} kcal</span>
+            </div>
+          </div>
+        </el-card>
         <WorkbenchTrends
-          :items="trendItems.slice(0, 10)"
-          class="mt-5"
+          :items="trendItems.slice(0, 4)"
           title="最新动态"
         />
       </div>
@@ -307,8 +357,27 @@ onMounted(() => {
           title="快捷导航"
           @click="navTo"
         />
-        <WorkbenchTodo :items="todoItems" class="mt-5" title="待办事项" />
+        <WorkbenchTodo :items="healthTips" class="mt-5" title="健康贴士" />
       </div>
     </div>
+
+    <!-- 修改目标对话框 -->
+    <el-dialog v-model="editGoalsDialogVisible" title="修改健康目标" width="400px">
+      <el-form :model="goalsForm" label-width="120px">
+        <el-form-item label="睡眠目标 (小时)">
+          <el-input-number v-model="goalsForm.daily_sleep_hours_goal" :min="1" :max="24" />
+        </el-form-item>
+        <el-form-item label="摄入目标 (kcal)">
+          <el-input-number v-model="goalsForm.daily_calories_intake_goal" :min="500" :max="5000" :step="100" />
+        </el-form-item>
+        <el-form-item label="消耗目标 (kcal)">
+          <el-input-number v-model="goalsForm.daily_calories_burn_goal" :min="100" :max="2000" :step="50" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editGoalsDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleUpdateGoals">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
