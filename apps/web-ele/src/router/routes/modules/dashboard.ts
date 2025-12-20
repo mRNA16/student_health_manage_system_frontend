@@ -13,6 +13,14 @@ const routes: RouteRecordRaw[] = [
     path: '/dashboard',
     component: () => import('#/views/dashboard/workspace/index.vue'),
   },
+  {
+    path: '/workspace',
+    redirect: '/dashboard',
+    meta: {
+      title: '重定向',
+      hideInMenu: true,
+    },
+  },
 ];
 
 export default routes;
