@@ -28,6 +28,7 @@ type Activity = {
   comments: Comment[];
   content: string;
   id: number;
+  loadingComments?: boolean; // 用于标识评论是否正在加载
   newComment?: string; // 可选字段，用于前端输入
   timestamp: string;
   type: 'meal' | 'sleep' | 'sport';
@@ -63,19 +64,21 @@ const getFriendDetail = async () => {
       response.activities && response.activities.length > 0
         ? response.activities[0]!.timestamp
         : undefined;
-    
-    const rawActivities = response.activities ? [...response.activities] : [];
-    
-    // 并行加载所有活动的评论
-    await Promise.all(
-      rawActivities.map(async (activity: any) => {
-        activity.comments = [];
-        activity.newComment = '';
-        await loadComments(activity);
-      })
-    );
-    
-    activities.value = rawActivities;
+
+    // 立即展示活动列表，并初始化加载状态
+    activities.value = response.activities
+      ? response.activities.map((activity: any) => ({
+          ...activity,
+          comments: [],
+          newComment: '',
+          loadingComments: true,
+        }))
+      : [];
+
+    // 异步加载每个活动的评论，必须遍历 activities.value (响应式对象) 才能触发视图更新
+    activities.value.forEach((activity) => {
+      loadComments(activity);
+    });
   } catch (error) {
     ElMessage.error('获取好友详情失败');
     console.error('Failed to fetch friend detail:', error);
@@ -95,6 +98,7 @@ const removeFriend = async () => {
 };
 
 const loadComments = async (activity: Activity) => {
+  activity.loadingComments = true;
   try {
     const res = await fetchComments(activity.type, activity.id);
     activity.comments = res.map((item) => ({
@@ -104,6 +108,8 @@ const loadComments = async (activity: Activity) => {
     }));
   } catch {
     activity.comments = [];
+  } finally {
+    activity.loadingComments = false;
   }
 };
 
@@ -154,7 +160,7 @@ onMounted(() => {
           <div class="activity-type">{{ activity.type }}</div>
           <div class="activity-content">{{ activity.content }}</div>
           <div class="activity-time">{{ formatDate(activity.timestamp) }}</div>
-          <div class="comments">
+          <div class="comments" v-loading="activity.loadingComments">
             <div
               v-for="comment in activity.comments"
               :key="comment.id"
